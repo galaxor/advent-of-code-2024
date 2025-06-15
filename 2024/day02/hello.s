@@ -1,6 +1,7 @@
 .bss
 buffer:
-  buffer_size = 8192
+  # buffer_size = 8192
+  buffer_size = 4
   .space buffer_size
 
 current_number_buffer:
@@ -34,6 +35,7 @@ _start:
   # r12 is going to be the offset into the destination string (current_number_buffer).
   xor %r12, %r12
 
+get_bytes:
   # Attempt to read a buffer of bytes
   mov $0, %rax  # syscall: read
   mov $0, %rdi             # fd = stdin
@@ -65,8 +67,11 @@ number_copy_loop:
   je end_of_string_found
   inc %r12
   inc %rcx
+
+  # If we hit the end of the buffer, try to get more data.  We're not done til we hit eof!
   cmp $buffer_size, %rcx 
-  jae end_of_buffer_found
+  jae get_bytes
+
   jmp number_copy_loop
 
 
@@ -80,7 +85,7 @@ end_of_buffer_found:
   mov $1, %rax       # syscall: sys_write
   mov $1, %rdi       # file descriptor: stdout
   mov $current_number_buffer, %rsi   # string address
-  mov %rcx, %rdx     # string length
+  mov %r12, %rdx     # string length
   syscall
 
   # Print a newline
