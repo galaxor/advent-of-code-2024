@@ -44,7 +44,7 @@ _start:
   report_safe_initialized_offset = 1
   report_safe_safe_offset = 0
 
-  xor %rbx, %rbx
+  mov $(report_safe_initialized | report_safe_safe), %rbx
 
   # r8 is the current index in "buffer".
   xor %r8, %r8
@@ -232,40 +232,33 @@ ready_for_next_number:
   # If this is the end of the report, then update the number of safe reports and get ready for a new report.
   # Whether this is the end of the report is one of the booleans.
 
+  test $end_of_report_found, %rbx
+  jz read_next_number
+
+  mov %rbx, %rax
+  and $(report_safe_initialized | report_safe_safe), %rax
+  cmp $(report_safe_initialized | report_safe_safe), %rax
+  sete %al
+  add %rax, %r15
+
+  # Reset all the booleans for the next report.
+  mov $(report_safe_initialized | report_safe_safe), %rbx
+
   
-  
+read_next_number:
   # If we hit the end of the buffer, try to get more data.  We're not done til we hit eof!
   xor %r12, %r12  # Start over reading into current_number_buffer
 
+  # Advance the pointer in buffer.
   inc %r8
 
+  # If we're at the end of the buffer, we need more bytes.
   cmp %r8, %r11
   jle get_bytes
 
   jmp number_copy_loop
 
 
-
-end_of_buffer_found:
-  mov $1, %rax       # syscall: sys_write
-  mov $1, %rdi       # file descriptor: stdout
-  mov $current_number_buffer, %rsi   # string address
-  mov %r12, %rdx     # string length
-  syscall
-
-  # Print a newline
-  mov $1, %rax
-  mov $1, %rdi
-  mov $newline, %rsi
-  mov $1, %rdx
-  syscall
-  
-
-  mov $1, %rax # syscall: sys_write
-  mov $1, %rdi # file descriptor: stdout
-  mov $hello, %rsi # string address
-  mov $hello_len, %rdx # string length
-  syscall # calls the kernel
 
 donezo:
   
