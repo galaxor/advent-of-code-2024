@@ -46,6 +46,9 @@ _start:
 
   xor %rbx, %rbx
 
+  # r8 is the current index in "buffer".
+  xor %r8, %r8
+
   # r12 is going to be the offset into the destination string (current_number_buffer).
   xor %r12, %r12
 
@@ -71,11 +74,11 @@ get_bytes:
   jz donezo
   
 
-  xor %rcx, %rcx           # The index into the buffer
+  xor %r8, %r8           # The index into the buffer
 number_copy_loop:
   # Examine the bytes.  Copy them one by one until we find a space or line feed.
   mov $buffer, %r9        
-  mov (%r9, %rcx), %al
+  mov (%r9, %r8), %al
 
   # I want to move the value from %al into the destination string.
   mov $current_number_buffer, %rdx
@@ -83,28 +86,25 @@ number_copy_loop:
 
   or $end_of_report_found, %rbx  # did we find the end of the report? Let's say yes.
   cmp $0xa, %al
-  je end_of_string_found
+  je end_of_number_found
   xor $end_of_report_found, %rbx  # We did not find the end of the report after all.
   cmp $0x20, %al
-  je end_of_string_found
+  je end_of_number_found
   inc %r12
-  inc %rcx
+  inc %r8
 
   # If we hit the end of the buffer, try to get more data.  We're not done til we hit eof!
-  cmp %r11, %rcx
+  cmp %r11, %r8
   jae get_bytes
 
   jmp number_copy_loop
 
 
-end_of_string_found:
+end_of_number_found:
   # Now we convert the string we stored in current_number_buffer into an integer.
 
-  # %r13 is the current number, %r14 is the previous number
-  mov %r13, %r14
-
-  xor %rcx, %rcx  # %rcx has the current index into the number string, %r12 has the end index
-  dec %r12  # This points to the last character in the number
+  xor %rcx, %rcx  # This points to the current character in current_number_buffer.
+  dec %r12  # This points to the last character in the current_number_buffer
 
   xor %r13, %r13  # We're saving the current integer into %r13.
 
@@ -173,10 +173,10 @@ we_have_current_number:
 
   cmp %r13, %r14                               # if( current_number > previous_number ) 
   jg not_ascending                             
-  mov %r14, %rax 
-  sub %r13, %rax
+  mov %r13, %rax 
+  sub %r14, %rax
   cmp $3, %rax                                
-  jg ascending_but_not_by_more_than_3
+  jbe ascending_but_not_by_more_than_3
   btr $report_safe_safe_offset, %rbx                #   if( current_number - previous_number > 3) report_safe = false
   bts $report_safe_initialized_offset, %rbx
   jmp ready_for_next_number
@@ -199,8 +199,8 @@ ascending_report_not_initialized:
 not_ascending:
   cmp %r13, %r14                               # if( current_number < previous_number ) 
   jl ready_for_next_number
-  mov %r13, %rax 
-  sub %r14, %rax
+  mov %r14, %rax 
+  sub %r13, %rax
   cmp $3, %rax                                
   jg descending_but_not_by_more_than_3
   btr $report_safe_safe_offset, %rbx                #   if( previous_number - current_number > 3) report_safe = false
@@ -235,8 +235,12 @@ ready_for_next_number:
   
   
   # If we hit the end of the buffer, try to get more data.  We're not done til we hit eof!
-  cmp %r11, %rcx
-  jae get_bytes
+  xor %r12, %r12  # Start over reading into current_number_buffer
+
+  inc %r8
+
+  cmp %r8, %r11
+  jle get_bytes
 
   jmp number_copy_loop
 
