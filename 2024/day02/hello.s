@@ -172,7 +172,7 @@ we_have_current_number:
 # }
 
   cmp %r13, %r14                               # if( current_number > previous_number ) 
-  jg not_ascending                             
+  jge not_ascending                             
   mov %r13, %rax 
   sub %r14, %rax
   cmp $3, %rax                                
@@ -198,11 +198,11 @@ ascending_report_not_initialized:
 
 not_ascending:
   cmp %r13, %r14                               # if( current_number < previous_number ) 
-  jl ready_for_next_number
+  je not_descending_either
   mov %r14, %rax 
   sub %r13, %rax
   cmp $3, %rax                                
-  jg descending_but_not_by_more_than_3
+  jbe descending_but_not_by_more_than_3
   btr $report_safe_safe_offset, %rbx                #   if( previous_number - current_number > 3) report_safe = false
   bts $report_safe_initialized_offset, %rbx
   jmp ready_for_next_number
@@ -210,7 +210,7 @@ not_ascending:
 descending_but_not_by_more_than_3:
   test $report_direction_initialized, %rbx     # if( report_direction_initialized )
   jz descending_report_not_initialized          
-  test $report_direction_ascending_offset, %rbx       #   if( report_direction == ascending )
+  test $report_direction_ascending, %rbx       #   if( report_direction == ascending )
   jz ready_for_next_number                    
   btr $report_safe_safe_offset, %rbx                #   report_safe = false
   bts $report_safe_initialized_offset, %rbx
@@ -221,6 +221,9 @@ descending_report_not_initialized:
   btr $report_direction_ascending_offset, %rbx
   jmp ready_for_next_number
 
+not_descending_either:
+  btr $report_safe_safe_offset, %rbx   # Report is not ascending or descending.  Unsafe.
+  bts $report_safe_initialized_offset, %rbx
 
 
 ready_for_next_number:
@@ -261,6 +264,81 @@ read_next_number:
 
 
 donezo:
+  # To print out number:
+  # Initialize a buffer to hold the digits. We'll fill the buffer from back to front.
+  # Initialize carry to be 0.
+
+  # start_of_loop
+  #   digit = (number & 0xF) + carry
+  #   if digit >= 10
+  #     carry = 1
+  #     digit -= 10
+  #   put digit in the buffer
+  #   number >> 4
+  #   if number > 0, go to start_of_loop
+
+
+  # r13 is the number as we manipulate it.
+  # rcx is the index into the output buffer (we're re-using "current_number_buffer".
+  # bl is the digit
+  # r10 is the address of current_number_buffer
+  # al is "carry".
+
+  mov %r15, %r13
+  mov $buffer_size, %rcx
+  dec %rcx
+  mov $current_number_buffer, %r10
+  xor %rax, %rax
+
+  # Make sure there's a "\n" at the end.
+  movb $0xa, (%r10, %rcx)
+  dec %rcx
+
+number_figure_out_loop:
+  mov %r13, %rbx
+  and $0xf, %rbx
+  add %rax, %rbx
+  cmp $10, %rbx
+  setae %al
+  # Subtract either 0 or 10 from rbx, depending on whether %al is 0 or 1. But do it without any branches.
+  # i.e., %rdx is %al multiplied by 10. Subtract it from rbx.
+  mov %rax, %rdx
+  sal $3, %rdx
+  add %rax, %rdx
+  add %rax, %rdx
+  sub %rdx, %rbx
+
+  add $0x30, %rbx   # ascii-ify the digit.
+  mov %bl, (%r10, %rcx)
+  dec %rcx
+  sar $4, %r13
+  ja number_figure_out_loop
+
+  # If carry is 1, put the final digit in the buffer.
+  # Otherwise, increment %rcx because there is no digit here to print.
+  # Actually, we'll just lay down '1' no matter what.  We'll only use the carry
+  # to decide whether to increment rcx.  If there was a carry, we don't
+  # increment rcx, and the '1' gets printed out.  If there was no carry, we
+  # increment rcx and the '1' doesn't print out.
+  movb $0x31, (%r10, %rcx)
+
+  # Add 0 to rcx if carry was 1.
+  # Add 1 to rcx if carry was 0.
+  not %rax
+  and $1, %rax
+  add %rax, %rcx
+
+  # Output the final number
+  
+  mov $1, %rax # syscall: sys_write
+  mov $1, %rdi # file descriptor: stdout
+  mov $current_number_buffer, %rsi
+  add %rcx, %rsi # string address
+  mov $buffer_size, %rdx    # string length
+  sub %rcx, %rdx
+  syscall # calls the kernel
+  
+
   
   mov $1, %rax # syscall: sys_write
   mov $1, %rdi # file descriptor: stdout
