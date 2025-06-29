@@ -182,13 +182,18 @@ maskout_loop:
   # we can mask out, and there is no saving this report.  Move to the next
   # report.
   cmp %r10, %r12
-  jbe report_is_saveable
+  jge report_is_saveable
   
   # Go back to the beginning of the report array.
   xor %r14, %r14
 
   # Go back to the beginning of the current number buffer
   xor %rdx, %rdx
+
+  # Advance the buffer index beyond this report.
+  inc %r8
+  inc %r8
+
   jmp number_copy_loop
 
 report_is_saveable:
@@ -204,7 +209,7 @@ report_is_saveable:
   add %rdx, %rcx
   # If the first non-masked-out number is after the end of the report, the report is safe.
   cmp %rcx, %r12
-  jle safe_by_default
+  jl safe_by_default
   mov (%rax, %rcx, 8), %r14
   inc %rcx
   cmp %rcx, %r10
@@ -212,7 +217,7 @@ report_is_saveable:
   add %rdx, %rcx
   # If the second non-masked-out number is after the end of the report, the report is safe.
   cmp %rcx, %r12
-  jle safe_by_default
+  jl safe_by_default
   mov (%rax, %rcx, 8), %r13
 
   # Assume the report is safe until proven otherwise.
@@ -320,14 +325,14 @@ ready_for_next_number:
   # Advance the index in the report array, bumping it if the new one is the masked-out number.
   inc %rcx
   # If that's the currently-masked-out number, skip it.
-  cmp $0, %r10
+  cmp %rcx, %r10
   sete %dl
   add %rdx, %rcx
 
   # If the index is after the end of the report, check whether the report is safe and act accordingly.
   # Otherwise, read the next number from the report.
   cmp %rcx, %r12
-  jle check_safe
+  jl check_safe
 
   mov $report_array, %rax
   mov (%rax, %rcx, 8), %r13
@@ -337,7 +342,7 @@ safe_by_default:
   or $(report_safe_initialized | report_safe_safe), %rbx
 
 check_safe:
-  test $(report_safe_initialized | report_safe_safe), %rbx
+  test $report_safe_safe, %rbx
   # If it's unsafe, we need to check if there's more numbers we could mask out.  If so, try the next one.
   je maskout_loop
 
