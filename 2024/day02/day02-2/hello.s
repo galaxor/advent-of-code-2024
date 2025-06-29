@@ -165,17 +165,63 @@ read_next_number:
 
 
 we_have_full_report:
+  # r14 should store the index of the last element of the report array, not the first open element.
   dec %r14
-  jmp report_safety_logic
 
+  # But actually, we're going to store that index in r12, because r14 will have the "previous number".
+  mov %r14, %r12
+
+  # r10 will hold the currently masked-out number.
+  mov $-2, %r10
+
+maskout_loop:
+  # Advance to the next masked-out number.
+  inc %r10
+
+  # If we've advanced beyond the end of the report array, there is nothing more
+  # we can mask out, and there is no saving this report.  Move to the next
+  # report.
+  cmp %r10, %r12
+  jbe report_is_saveable
+  
+  # Go back to the beginning of the report array.
+  xor %r14, %r14
+
+  # Go back to the beginning of the current number buffer
+  xor %rdx, %rdx
+  jmp number_copy_loop
+
+report_is_saveable:
+  # rcx will hold the index of the report element we are currently looking at.
+  xor %rcx, %rcx
+
+  # Initialize by storing the first number into "previous number". We'll start at the second number.
+  # Bump up what we mean by "first" and "second" number if they are the masked out numbers.
+  mov $report_array, %rax
+  xor %rdx, %rdx
+  cmp $0, %r10
+  sete %dl
+  add %rdx, %rcx
+  # If the first non-masked-out number is after the end of the report, the report is safe.
+  cmp %rcx, %r12
+  jle safe_by_default
+  mov (%rax, %rcx, 8), %r14
+  inc %rcx
+  cmp %rcx, %r10
+  sete %dl
+  add %rdx, %rcx
+  # If the second non-masked-out number is after the end of the report, the report is safe.
+  cmp %rcx, %r12
+  jle safe_by_default
+  mov (%rax, %rcx, 8), %r13
+
+  # Assume the report is safe until proven otherwise.
+  mov $(previous_number_initialized | report_safe_initialized | report_safe_safe), %rbx
 
 report_safety_logic:
   # booleans are in %rbx
   # current number is in %r13
   # r14 is the "previous number"
-
-  bts $previous_number_initialized_offset, %rbx
-  jnc ready_for_next_number
 
   # This is where we check the relationship of the previous number with this
   # number and set the report direction and whether the report is safe and
@@ -264,27 +310,55 @@ not_descending_either:
   btr $report_safe_safe_offset, %rbx   # Report is not ascending or descending.  Unsafe.
   bts $report_safe_initialized_offset, %rbx
 
-
 ready_for_next_number:
+  # Advance the index, bumping it if they are masked out.
+  # Then we see if we hit the end of the report.  If it's safe, say so.  If not, try the next mask-out.
+
   # The current number is now the previous number.
   mov %r13, %r14
 
-  # Check some stuff:
-  # If this is not the end of the report, then get the next number.
-  # If this is the end of the report, then update the number of safe reports and get ready for a new report.
-  # Whether this is the end of the report is one of the booleans.
+  # Advance the index in the report array, bumping it if the new one is the masked-out number.
+  inc %rcx
+  # If that's the currently-masked-out number, skip it.
+  cmp $0, %r10
+  sete %dl
+  add %rdx, %rcx
 
-  test $end_of_report_found, %rbx
-  jz read_next_number
+  # If the index is after the end of the report, check whether the report is safe and act accordingly.
+  # Otherwise, read the next number from the report.
+  cmp %rcx, %r12
+  jle check_safe
 
-  mov %rbx, %rax
-  and $(report_safe_initialized | report_safe_safe), %rax
-  cmp $(report_safe_initialized | report_safe_safe), %rax
-  sete %al
-  add %rax, %r15
+  mov $report_array, %rax
+  mov (%rax, %rcx, 8), %r13
+  jmp report_safety_logic
+
+safe_by_default:
+  or $(report_safe_initialized | report_safe_safe), %rbx
+
+check_safe:
+  test $(report_safe_initialized | report_safe_safe), %rbx
+  # If it's unsafe, we need to check if there's more numbers we could mask out.  If so, try the next one.
+  je maskout_loop
+
+  # We know it's safe.
+  inc %r15
 
   # Reset all the booleans for the next report.
   mov $(report_safe_initialized | report_safe_safe), %rbx
+
+  # Start constructing the next report.
+  # Reset the index of current_number_buffer
+  xor %r12, %r12
+
+  # Advance the index in the buffer and check if we're out of bytes.
+  inc %r8
+  
+  # If we hit the end of the buffer, try to get more data.  We're not done til we hit eof!
+  cmp %r11, %r8
+  jae get_bytes
+
+  jmp number_copy_loop
 
   
 donezo:
