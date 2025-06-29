@@ -184,6 +184,7 @@ maskout_loop:
   cmp %r10, %r12
   jge report_is_saveable
   
+  # The report is not saveable.
   # Go back to the beginning of the report array.
   xor %r14, %r14
 
@@ -192,7 +193,9 @@ maskout_loop:
 
   # Advance the buffer index beyond this report.
   inc %r8
-  inc %r8
+
+  # Reset the maskout.
+  mov $-2, %r10
 
   jmp number_copy_loop
 
@@ -355,6 +358,9 @@ check_safe:
   # Start constructing the next report.
   # Reset the index of current_number_buffer
   xor %r12, %r12
+
+  # Reset the number of levels.
+  xor %r14, %r14
 
   # Advance the index in the buffer and check if we're out of bytes.
   inc %r8
