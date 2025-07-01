@@ -1,6 +1,30 @@
 .text            
 .global _start
 _start:
+  # Variables
+  # char input_buffer[buffer_size]
+  # char *input_buffer_pointer
+  # char *input_buffer_end_pointer
+
+  # char multiplicand_buffer[buffer_size]
+  # char *multiplicand_buffer_pointer
+  # char *multiplicand_end_pointer
+
+  # char multiplier_buffer[buffer_size]
+  # char *multiplier_buffer_pointer
+  # char *multiplier_buffer_end_pointer
+
+  # unsigned int multiplicand
+  # unsigned int multiplier
+
+  # unsigned int current_state
+  # unsigned int current_sum
+
+  # "Call" read_into_buffer (by falling into it).
+  # Set the lr to the "reset" label so it returns to that point.
+  ldr lr, =reset
+
+read_into_buffer:
   # Read <= 8192 bytes from stdin
   mov r7, #3
   mov r0, #0
@@ -13,20 +37,31 @@ _start:
   beq exit
 
   # Number of bytes read is in r0
+
+  # input_buffer_pointer = input_buffer + 0
   ldr r1, =input_buffer
+  ldr r2, =input_buffer_pointer
+  str r1, [r2]
+
+  # input_buffer_end_pointer = input_buffer + number_of_bytes_read
   add r2, r1, r0
   ldr r3, =input_buffer_end_pointer
   str r2, [r3]
-  
-  # r1 = input buffer pointer
-  # r2 = input buffer end pointer
-  # r4 = multiplicand buffer pointer
-  # r5 = multiplier buffer pointer
-  # r6 = current state
 
-  ldr r4, =multiplicand_buffer
-  ldr r5, =multiplier_buffer
-  mov r6, #0
+  # Return.
+  bx lr
+
+reset:
+
+  ldr r0, =multiplicand_buffer
+  ldr r1, =multiplicand_buffer_pointer
+  str r0, [r1]
+
+  ldr r2, =multiplier_buffer
+  ldr r3, =multiplier_buffer_pointer
+  str r2, [r3]
+
+  mov r6, #(STATE_START << 8)
 
 examine_character_loop:
   cmp r1, r2
@@ -35,59 +70,16 @@ examine_character_loop:
   # Grab the current character from the input buffer into r3 for consideration (incrementing the pointer after).
   ldrb r3, [r1], #+1
 
-  # Do things based on the state (in r6) and the character (in r3).
-  cmp r6, #STATE_START
-  itt eq
-  cmpeq r3, #'m'
-  beq goto_state_m
+  
 
-  cmp r6, #STATE_M
-  it eq
-  cmpeq r3, #'u'
-  beq goto_state_u
-
-  cmp r6, #STATE_U
-  it eq
-  cmpeq r3, #'l'
-  beq goto_state_l
-
-  cmp r6, #STATE_L
-  it eq
-  cmpeq r3, #'('
-  beq goto_state_open_paren
-
-  # Maybe the thing is always 'gt' vs 'le'.  And we check whether the state is greater than state_l (state open paren minus one), then whether the character is greater than 0x2f (0x30 is '0'), then whether the state is greater than 0x39 (which it shouldn't be).  Something like that.
-  cmp r6, #STATE_OPEN_PAREN
-
-goto_start_state:
-  b exit
-
-goto_state_m:
-
-goto_state_u:
-
-goto_state_l:
-
-goto_state_open_paren:
-
-goto_state_multiplicand:
-
-goto_stat_comma:
-
-goto_state_multiplier:
-
-goto_state_close_paren:
-
+  
 
   # Go back to the top of the loop.
   # The pointer has already been incremented as a result of the post-indexing on the ldrb.
   b examine_character_loop
 
-
-end_of_character_loop:
-  # Read more characters from stdin
-  # (can we just jump to _start?)
   
+end_of_character_loop:
 
 
 exit:
@@ -110,15 +102,23 @@ STATE_CLOSE_PAREN = 8
 
 buffer_size = 8192
 input_buffer: .dcb.b buffer_size
+input_buffer_pointer: .long input_buffer
 input_buffer_end_pointer: .long 0
 
 multiplicand_buffer: .dcb.b buffer_size
+multiplicand_buffer_pointer: .long multiplicand_buffer
 multiplicand_end_pointer: .long 0
+
 multiplier_buffer: .dcb.b buffer_size
+multiplier_buffer_pointer: .long multiplier_buffer
 multiplier_buffer_end_pointer: .long 0
 
 multiplicand: .int 0
 multiplier: .int 0
+
+current_state: .int STATE_START
+current_sum: .int 0
+
 
 # These are the different actions we can take at each step of our automaton.
 OP_NOOP = 0
@@ -181,6 +181,8 @@ automaton_table:
   .int '9' + STATE_MULTIPLIER << 8 + STATE_MULTIPLIER << 16 + OP_COPY_MULTIPLIER_DIGIT
 
   .int ')' + STATE_MULTIPLIER << 8 + STATE_START << 16 + OP_MULTIPLY
+
+automaton_table_end = .
 
 
 message:
