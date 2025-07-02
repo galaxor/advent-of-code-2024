@@ -1,3 +1,5 @@
+.syntax unified
+
 .text            
 .global _start
 _start:
@@ -22,8 +24,10 @@ _start:
 
   # "Call" read_into_buffer (by falling into it).
   # Set the lr to the "reset" label so it returns to that point.
-  ldr lr, =reset
-
+  bl read_into_buffer
+  b reset
+  
+.thumb_func
 read_into_buffer:
   # Read <= 8192 bytes from stdin
   mov r7, #3
@@ -63,15 +67,59 @@ reset:
 
   mov r6, #(STATE_START << 8)
 
-examine_character_loop:
+examine_character_loop_init:
+  # If we've reached the end of the input buffer, we need to load more characters.
+  ldr r0, =input_buffer_pointer
+  ldr r1, [r0]
+  ldr r3, =input_buffer_end_pointer
+  ldr r2, [r3]
+
   cmp r1, r2
-  bge end_of_character_loop
+    # XXX We should be loading more characters here instead of branching to the end.
+  bge end_of_character_loop 
 
   # Grab the current character from the input buffer into r3 for consideration (incrementing the pointer after).
-  ldrb r3, [r1], #+1
+  # For some reason, I get an illegal instruction error if I don't have this nop here.
+  # Maybe it's an interworking fail because the last instruction was a branch?
+  nop
+  ldrb r5, [r1]
+  add r1, r1, #1
+  str r1, [r0]
+
+  # Loop through the states and see what to do.
+  # r0 = scratch
+  # r1 = scratch
+  # r2 = automaton_table_pointer
+  # r3 = automaton_table_end_pointer
+  # r4 = automaton word
+  # r5 = current character
+  # r6 = current state << 8
+
+  ldr r2, =automaton_table
+  ldr r3, =automaton_table_end_pointer
+
+  # r5 now contains (current state << 8) + current character.
+  orr r5, r6
+
+examine_character_loop:
+  mov r0, #0xffff
+
+  # Load the automaton word and then advance the automaton table pointer.
+  ldmia r2!, { r4 }
+
+  # We want r1 to contain 0x00ff0000 so it can mask out the state to move to.
+  mov r1, #0xff
+  lsl r1, r1, #16
+
+  and r0, r4
+  # r0 now contains the lower 2 bytes of the automaton word.
+  # If that equals (current state << 8 | current character), do the thing!
+  cmp r0, r5
+  # it eq
+  # andeq r5, r4, r1
+  # lsreq r5, 
 
   
-
   
 
   # Go back to the top of the loop.
@@ -182,7 +230,7 @@ automaton_table:
 
   .int ')' + STATE_MULTIPLIER << 8 + STATE_START << 16 + OP_MULTIPLY
 
-automaton_table_end = .
+automaton_table_end_pointer = .
 
 
 message:
