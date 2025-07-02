@@ -2,6 +2,7 @@
 
 .text            
 .global _start
+.thumb_func
 _start:
   # Variables
   # char input_buffer[buffer_size]
@@ -92,8 +93,7 @@ examine_character_loop_init:
   # r2 = automaton_table_pointer
   # r3 = automaton_table_end_pointer
   # r4 = automaton word
-  # r5 = current character
-  # r6 = current state << 8
+  # r5 = (current_state << 8) | current character
 
   ldr r2, =automaton_table
   ldr r3, =automaton_table_end_pointer
@@ -102,8 +102,6 @@ examine_character_loop_init:
   orr r5, r6
 
 examine_character_loop:
-  mov r0, #0xffff
-
   # Load the automaton word and then advance the automaton table pointer.
   ldmia r2!, { r4 }
 
@@ -111,23 +109,85 @@ examine_character_loop:
   mov r1, #0xff
   lsl r1, r1, #16
 
+  mov r0, #0xffff
   and r0, r4
   # r0 now contains the lower 2 bytes of the automaton word.
   # If that equals (current state << 8 | current character), do the thing!
   cmp r0, r5
-  # it eq
-  # andeq r5, r4, r1
-  # lsreq r5, 
 
-  
+  # If this is the right state transition,
+  # put the new (state << 8) into r6
+  itttt eq
+  andeq r6, r4, r1
+  lsreq r6, r6, #8
+  # shift the mask over so we can get the opcode of the state transition.
+  lsleq r1, r1, #8
+  andeq r1, r4
+
+  ite eq
+  moveq r0, #-1
+  movne r0, #0
+
+  # r0 has -1 if this is a matching state transition and 0 if it's not.
+  # So r1 has the state transition opcodes if this is the matching state, and 0 if it's not.
+  and r1, r1, r0
+
+  # Figure out what opcode(s) we're doing and jump to the subroutine to do that.
+  # The subroutine must not touch r1, which contains the list of opcodes that we're doing.
+  push {r2, r3, r4, r5}
+  mov r0, r5
+
+  # r0 needs to have the (current state << 8 | current character) so we can pass it to any of the ops subroutines if we do them.
+
+  mov r7, #OP_COPY_MULTIPLICAND_DIGIT
+  ands r7, r7, r1
+  it ne
+  blne copy_multiplicand_digit
+
+  mov r7, #OP_COPY_MULTIPLIER_DIGIT
+  ands r7, r7, r1
+  it ne
+  blne copy_multiplier_digit
+
+  mov r7, #OP_MULTIPLY
+  ands r7, r7, r1
+  it ne
+  blne multiply
+
+  # Whether we're resetting here or not, we need to get everything back off the stack.
+  pop {r2, r3, r4, r5}
+
+  mov r7, #OP_RESET
+  ands r7, r7, r1
+  bne reset
+
+  # r0 is free again.
   
 
-  # Go back to the top of the loop.
-  # The pointer has already been incremented as a result of the post-indexing on the ldrb.
+  # If r1 is not zero, that means we found a match, so let's get the next character.
+  mov r0, #-1
+  cmp r0, r1
+  bne examine_character_loop_init
+
+
+  # We didn't match this state. If that was the last state, we reset. Otherwise, we check the next state.
+  # r2 = automaton_table_pointer
+  # r3 = automaton_table_end_pointer
+  cmp r2, r3
+  bge reset
   b examine_character_loop
-
   
+
 end_of_character_loop:
+
+.thumb_func
+copy_multiplicand_digit:
+  
+.thumb_func
+copy_multiplier_digit:
+
+.thumb_func
+multiply:
 
 
 exit:
@@ -169,11 +229,11 @@ current_sum: .int 0
 
 
 # These are the different actions we can take at each step of our automaton.
-OP_NOOP = 0
-OP_COPY_MULTIPLICAND_DIGIT = 1 << 24
-OP_COPY_MULTIPLIER_DIGIT = 2 << 24
-OP_MULTIPLY = (8+4) << 24
-OP_RESET = 8 << 24
+OP_NOOP = 1 << 24
+OP_COPY_MULTIPLICAND_DIGIT = 2 << 24
+OP_COPY_MULTIPLIER_DIGIT = 4 << 24
+OP_MULTIPLY = (16+8) << 24
+OP_RESET = 16 << 24
 
 
 automaton_table:
