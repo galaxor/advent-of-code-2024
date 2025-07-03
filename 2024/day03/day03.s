@@ -77,7 +77,7 @@ examine_character_loop_init:
 
   cmp r1, r2
     # XXX We should be loading more characters here instead of branching to the end.
-  bge end_of_character_loop 
+  bge exit
 
   # Grab the current character from the input buffer into r3 for consideration (incrementing the pointer after).
   # For some reason, I get an illegal instruction error if I don't have this nop here.
@@ -162,10 +162,9 @@ examine_character_loop:
   bne reset
 
   # r0 is free again.
-  
 
   # If r1 is not zero, that means we found a match, so let's get the next character.
-  mov r0, #-1
+  mov r0, #0
   cmp r0, r1
   bne examine_character_loop_init
 
@@ -178,22 +177,89 @@ examine_character_loop:
   b examine_character_loop
   
 
-end_of_character_loop:
-
 .thumb_func
 copy_multiplicand_digit:
+
+  # char multiplicand_buffer[buffer_size]
+  # char *multiplicand_buffer_pointer
+  # char *multiplicand_end_pointer
+
+  # r0 has the (current state << 8 | current character)
+  mov r6, #0xff
+  and r5, r0, r6
+
+  ldr r4, =multiplicand_buffer_pointer
+  str r5, [r4], #1
+
+  # Return
+  bx lr
+
   
 .thumb_func
 copy_multiplier_digit:
 
+  # char multiplier_buffer[buffer_size]
+  # char *multiplier_buffer_pointer
+  # char *multiplier_end_pointer
+
+  # r0 has the (current state << 8 | current character)
+  mov r6, #0xff
+  and r5, r0, r6
+
+  ldr r4, =multiplier_buffer_pointer
+  str r5, [r4], #1
+
+  # Return
+  bx lr
+
 .thumb_func
 multiply:
+  # For now, I'm just going to print out the multiplication I would do.
 
+  ldr r1, =multiplicand_buffer
+
+  ldr r4, =multiplicand_buffer_pointer
+  ldr r4, [r4]
+
+  # Write the multiplicand to stdout
+  mov r7, #4
+  mov r0, #1
+  ldr r1, =multiplicand_buffer
+    # The size of the buffer to print is the multiplicand buffer pointer minus the start of the multiplicand buffer.
+  sub r2, r4, r1
+  swi 0
+
+  # Write " * " to stdout
+  ldr r1, =times_string
+  mov r2, #3
+  swi 0
+
+  # Write the multiplier to stdout.
+  ldr r1, =multiplier_buffer
+
+  ldr r4, =multiplier_buffer_pointer
+  ldr r4, [r4]
+
+  # Write the multiplier to stdout
+  mov r7, #4
+  mov r0, #1
+  ldr r1, =multiplier_buffer
+    # The size of the buffer to print is the multiplier buffer pointer minus the start of the multiplier buffer.
+  sub r2, r4, r1
+  swi 0
+  
+  # Write a newline to stdout
+  ldr r1, =newline
+  mov r2, #1
+  swi 0
+
+  # Return
+  bx lr
 
 exit:
   # Exit
   mov r7, #1
-  # We're keeping r0, the return value from read, as our return code.
+  mov r0, #0
   swi 0
 
 .data
@@ -241,8 +307,11 @@ automaton_table:
   # Any time an (input state, input character) has no output state or action, the output state is STATE_START and the output action is to reset.
   .int 'm' + STATE_START << 8 + STATE_M << 16 + OP_NOOP
   .int 'u' + STATE_M << 8 + STATE_U << 16 + OP_NOOP
+  .int 'm' + STATE_M << 8 + STATE_M << 16 + OP_RESET
   .int 'l' + STATE_U << 8 + STATE_L << 16 + OP_NOOP
+  .int 'm' + STATE_U << 8 + STATE_M << 16 + OP_RESET
   .int '(' + STATE_L << 8 + STATE_OPEN_PAREN << 16 + OP_NOOP
+  .int 'm' + STATE_L << 8 + STATE_M << 16 + OP_RESET
 
   .int '1' + STATE_OPEN_PAREN << 8 + STATE_MULTIPLICAND << 16 + OP_COPY_MULTIPLICAND_DIGIT
   .int '2' + STATE_OPEN_PAREN << 8 + STATE_MULTIPLICAND << 16 + OP_COPY_MULTIPLICAND_DIGIT
@@ -253,6 +322,7 @@ automaton_table:
   .int '7' + STATE_OPEN_PAREN << 8 + STATE_MULTIPLICAND << 16 + OP_COPY_MULTIPLICAND_DIGIT
   .int '8' + STATE_OPEN_PAREN << 8 + STATE_MULTIPLICAND << 16 + OP_COPY_MULTIPLICAND_DIGIT
   .int '9' + STATE_OPEN_PAREN << 8 + STATE_MULTIPLICAND << 16 + OP_COPY_MULTIPLICAND_DIGIT
+  .int 'm' + STATE_OPEN_PAREN << 8 + STATE_M << 16 + OP_RESET
 
   .int '0' + STATE_MULTIPLICAND << 8 + STATE_MULTIPLICAND << 16 + OP_COPY_MULTIPLICAND_DIGIT
   .int '1' + STATE_MULTIPLICAND << 8 + STATE_MULTIPLICAND << 16 + OP_COPY_MULTIPLICAND_DIGIT
@@ -265,6 +335,7 @@ automaton_table:
   .int '8' + STATE_MULTIPLICAND << 8 + STATE_MULTIPLICAND << 16 + OP_COPY_MULTIPLICAND_DIGIT
   .int '9' + STATE_MULTIPLICAND << 8 + STATE_MULTIPLICAND << 16 + OP_COPY_MULTIPLICAND_DIGIT
 
+  .int 'm' + STATE_MULTIPLICAND << 8 + STATE_M << 16 + OP_RESET
   .int ',' + STATE_MULTIPLICAND << 8 + STATE_COMMA << 16 + OP_NOOP
 
   .int '1' + STATE_COMMA << 8 + STATE_MULTIPLIER << 16 + OP_COPY_MULTIPLIER_DIGIT
@@ -276,6 +347,7 @@ automaton_table:
   .int '7' + STATE_COMMA << 8 + STATE_MULTIPLIER << 16 + OP_COPY_MULTIPLIER_DIGIT
   .int '8' + STATE_COMMA << 8 + STATE_MULTIPLIER << 16 + OP_COPY_MULTIPLIER_DIGIT
   .int '9' + STATE_COMMA << 8 + STATE_MULTIPLIER << 16 + OP_COPY_MULTIPLIER_DIGIT
+  .int 'm' + STATE_COMMA << 8 + STATE_M << 16 + OP_RESET
 
   .int '0' + STATE_MULTIPLIER << 8 + STATE_MULTIPLIER << 16 + OP_COPY_MULTIPLIER_DIGIT
   .int '1' + STATE_MULTIPLIER << 8 + STATE_MULTIPLIER << 16 + OP_COPY_MULTIPLIER_DIGIT
@@ -287,10 +359,17 @@ automaton_table:
   .int '7' + STATE_MULTIPLIER << 8 + STATE_MULTIPLIER << 16 + OP_COPY_MULTIPLIER_DIGIT
   .int '8' + STATE_MULTIPLIER << 8 + STATE_MULTIPLIER << 16 + OP_COPY_MULTIPLIER_DIGIT
   .int '9' + STATE_MULTIPLIER << 8 + STATE_MULTIPLIER << 16 + OP_COPY_MULTIPLIER_DIGIT
+  .int 'm' + STATE_MULTIPLIER << 8 + STATE_M << 16 + OP_RESET
 
   .int ')' + STATE_MULTIPLIER << 8 + STATE_START << 16 + OP_MULTIPLY
 
 automaton_table_end_pointer = .
+
+times_string:
+  .asciz " * "
+
+newline:
+  .asciz "\n"
 
 
 message:
