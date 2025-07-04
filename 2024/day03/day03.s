@@ -75,9 +75,15 @@ examine_character_loop_init:
   ldr r3, =input_buffer_end_pointer
   ldr r2, [r3]
 
+  push {r2, r3, r4, r5, r6}
   cmp r1, r2
-    # XXX We should be loading more characters here instead of branching to the end.
-  bge exit
+  it ge
+  blge read_into_buffer
+  pop {r2, r3, r4, r5, r6}
+
+  # We may have changed the input buffer pointer. Reload it.
+  ldr r0, =input_buffer_pointer
+  ldr r1, [r0]
 
   # Grab the current character from the input buffer into r3 for consideration (incrementing the pointer after).
   # For some reason, I get an illegal instruction error if I don't have this nop here.
