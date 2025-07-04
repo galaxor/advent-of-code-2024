@@ -262,13 +262,81 @@ multiply:
   mov r2, #1
   swi 0
 
+  # Parse the integers and add them to the total.
+  ldr r0, =multiplicand_buffer
+  ldr r2, =multiplicand_buffer_pointer
+  ldr r1, [r2]
+  push {lr}
+  bl parse_int
+  pop {lr}
+
+  # We got an integer in r0. Push it to the stack so we can parse the next integer.
+  push {r0, lr}
+  ldr r0, =multiplier_buffer
+  ldr r2, =multiplier_buffer_pointer
+  ldr r1, [r2]
+  bl parse_int
+  mov r1, r0
+  pop {r0, lr}
+
+  # We may need to do something more complicated, since muls does not allow us to detect overflows.
+  # We may need to use umull, which stores the product into two registers like x86 does.
+  # https://community.arm.com/arm-community-blogs/b/architectures-and-processors-blog/posts/detecting-overflow-from-mul
+
+  # Now r0 has the multiplicand and r1 has the multiplier.
+  muls r0, r1
+  
+  # Dig out the sum and add the product to it.  (The product is in r0).
+  ldr r2, =current_sum
+  ldr r3, [r2]
+  add r3, r3, r0
+  str r3, [r2]
+
   # Return
   bx lr
 
+.thumb_func
+parse_int:
+  # The pointer to the number's buffer will be in r0.
+  # The pointer to the end of the number's buffer will be in r1.
+  # We will accumulate into r5, and move it into r0 at the end.
+  # We will return the integer in r0.
+  mov r5, #0
+
+parse_int_loop:
+  ldrb r3, [r0]
+    # 0x30 is ascii for '0'.
+  sub r4, r3, #0x30     
+  add r5, r5, r4
+
+  # If we're not at the end of the number's buffer, multiply by 10.
+  add r0, r0, #1
+
+  cmp r0, r1
+  itttt lt
+  movlt r5, r6
+  lsllt r5, #3
+  addlt r5, r5, r6
+  addlt r5, r5, r6
+
+  # Go on to the next digit of the input buffer
+  it lt
+  blt parse_int_loop
+
+  # The output needs to be in r0.
+  mov r0, r5
+  
+  # Return if we've processed all the digits.
+  bx lr
+
+.thumb_func
 exit:
+  ldr r2, =current_sum
+  ldr r3, [r2]
+
   # Exit
   mov r7, #1
-  mov r0, #0
+  mov r0, r3
   swi 0
 
 .data
