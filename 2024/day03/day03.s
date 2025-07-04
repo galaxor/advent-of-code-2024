@@ -135,7 +135,7 @@ examine_character_loop:
   # Figure out what opcode(s) we're doing and jump to the subroutine to do that.
   # The subroutine must not touch r1, which contains the list of opcodes that we're doing.
   mov r0, r5
-  push {r0, r2, r3, r4, r5, r6}
+  push {r0, r1, r2, r3, r4, r5, r6}
 
   # r0 needs to have the (current state << 8 | current character) so we can pass it to any of the ops subroutines if we do them.
 
@@ -155,7 +155,7 @@ examine_character_loop:
   blne multiply
 
   # Whether we're resetting here or not, we need to get everything back off the stack.
-  pop {r0, r2, r3, r4, r5, r6}
+  pop {r0, r1, r2, r3, r4, r5, r6}
 
   mov r7, #OP_RESET
   ands r7, r7, r1
