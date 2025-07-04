@@ -336,7 +336,35 @@ parse_int_loop:
   bx lr
 
 .thumb_func
+udivmod:
+  # dividend in r0
+  # divisor in r1
+  # return the remainder in r0
+  # return the quotient in r1
+
+  # Move the divisor into r2 so we can build the quotient in r1.
+  mov r2, r1
+  mov r1, #0
+
+udivmod_loop:
+  sub r0, r0, r2
+  add r1, r1, #1
+  
+  # If the remainder is less than the divisor, that's the final remainder, and the quotient is in r1.
+  cmp r0, r2
+  it gt
+  bgt udivmod_loop
+
+  # If we've got a remainder that's less than the divisor, return.
+  # The remainder is in r0 and the quotient is in r1.
+  bx lr
+
+.thumb_func
 exit:
+  mov r0, #17
+  mov r1, #5
+  bl udivmod
+
   ldr r2, =current_sum
   ldr r3, [r2]
 
@@ -453,7 +481,6 @@ times_string:
 
 newline:
   .asciz "\n"
-
 
 message:
   .asciz "hello world\n"
