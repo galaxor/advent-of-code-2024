@@ -314,7 +314,7 @@ parse_int_loop:
 
   cmp r0, r1
   itttt lt
-  movlt r5, r6
+  movlt r6, r5
   lsllt r5, #3
   addlt r5, r5, r6
   addlt r5, r5, r6
