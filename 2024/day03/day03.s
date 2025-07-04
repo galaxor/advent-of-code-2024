@@ -134,8 +134,8 @@ examine_character_loop:
 
   # Figure out what opcode(s) we're doing and jump to the subroutine to do that.
   # The subroutine must not touch r1, which contains the list of opcodes that we're doing.
-  push {r2, r3, r4, r5}
   mov r0, r5
+  push {r0, r2, r3, r4, r5, r6}
 
   # r0 needs to have the (current state << 8 | current character) so we can pass it to any of the ops subroutines if we do them.
 
@@ -155,7 +155,7 @@ examine_character_loop:
   blne multiply
 
   # Whether we're resetting here or not, we need to get everything back off the stack.
-  pop {r2, r3, r4, r5}
+  pop {r0, r2, r3, r4, r5, r6}
 
   mov r7, #OP_RESET
   ands r7, r7, r1
@@ -189,7 +189,9 @@ copy_multiplicand_digit:
   and r5, r0, r6
 
   ldr r4, =multiplicand_buffer_pointer
-  str r5, [r4], #1
+  ldr r6, [r4]
+  strb r5, [r6], #1
+  str r6, [r4]
 
   # Return
   bx lr
@@ -207,10 +209,13 @@ copy_multiplier_digit:
   and r5, r0, r6
 
   ldr r4, =multiplier_buffer_pointer
-  str r5, [r4], #1
+  ldr r6, [r4]
+  strb r5, [r6], #1
+  str r6, [r4]
 
   # Return
   bx lr
+
 
 .thumb_func
 multiply:
@@ -230,6 +235,8 @@ multiply:
   swi 0
 
   # Write " * " to stdout
+  mov r7, #4
+  mov r0, #1
   ldr r1, =times_string
   mov r2, #3
   swi 0
@@ -249,6 +256,8 @@ multiply:
   swi 0
   
   # Write a newline to stdout
+  mov r7, #4
+  mov r0, #1
   ldr r1, =newline
   mov r2, #1
   swi 0
