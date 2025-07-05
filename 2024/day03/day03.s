@@ -339,8 +339,15 @@ parse_int_loop:
 udivmod:
   # dividend in r0
   # divisor in r1
-  # return the remainder in r0
-  # return the quotient in r1
+  # Return the quotient in r0, the divisor in r1, and the remainder in r2.
+
+  # If the divisor is already larger than the dividend, the set the remainder to the dividend and the quotient to 0.
+  cmp r0, r1
+  ittt lt
+  movlt r2, r0
+  movlt r0, #0
+  bxlt lr
+  
 
   # Move the divisor into r2 so we can build the quotient in r1.
   mov r2, r1
@@ -352,25 +359,103 @@ udivmod_loop:
   
   # If the remainder is less than the divisor, that's the final remainder, and the quotient is in r1.
   cmp r0, r2
-  it gt
-  bgt udivmod_loop
+  it ge
+  bge udivmod_loop
 
   # If we've got a remainder that's less than the divisor, return.
-  # The remainder is in r0 and the quotient is in r1.
+  # Return the quotient in r0, the divisor in r1, and the remainder in r2.
+
+  # Remainder to temp storage
+  mov r3, r0
+
+  # Quotient to r0.
+  mov r0, r1
+
+  # Divisor to r1
+  mov r1, r2
+
+  # Remainder to r2
+  mov r2, r3
+
   bx lr
 
 .thumb_func
-exit:
-  mov r0, #17
-  mov r1, #5
+int_to_decimal_string:
+  # To print out number:
+  # Initialize a buffer to hold the digits. We'll fill the buffer from back to front.
+  # We return a pointer to the beginning of the number buffer in r0.
+  # The buffer ends at output_number_buffer_end.
+
+  # start_of_loop
+  #   r0 = (the current number) / 10
+  #   r1 = divisor (ten)
+  #   r2 = (the current number) % 10
+  #   put r1 on the buffer
+  #   set the current number to r0
+  #   Is the current number 0?  If not, go back to loop.
+
+  mov r1, #10
+
+  # r4 is the pointer into the output buffer (starting at "output_number_buffer").
+  # We need the pointer to start at the back.
+  ldr r4, =output_number_buffer
+  mov r5, #buffer_size
+  add r4, r4, r5
+
+  # Make sure we can return.
+  push {lr}
+
+int_to_decimal_string_loop:
+  sub r4, r4, #1
   bl udivmod
 
+  # The digit is in r2.  Ascii-fy it.
+  add r2, r2, #0x30
+  # Put the digit into the buffer
+  strb r2, [r4]
+  cmp r0, #0
+  it ne
+  bne int_to_decimal_string_loop
+
+  # The buffer is filled.  Return it.
+  # r0 will be the pointer to the start of the number string.
+  mov r0, r4
+
+  # r1 will be the length of the string.
+  ldr r1, =output_number_buffer_end
+  sub r1, r1, r0
+  
+
+  pop {lr}
+  bx lr
+  
+
+.thumb_func
+exit:
   ldr r2, =current_sum
-  ldr r3, [r2]
+  ldr r0, [r2]
+
+  # Translate the number to a string.
+  # int_to_decimal_string takes the number in r0 and returns a pointer to the string in r0 and the length in r1.
+  bl int_to_decimal_string
+  
+  # Write the number to stdout
+  mov r7, #4
+  mov r2, r1
+  mov r1, r0
+  mov r0, #1
+  swi 0
+
+  # Write "\n" to stdout
+  mov r7, #4
+  mov r0, #1
+  ldr r1, =newline
+  mov r2, #1
+  swi 0
 
   # Exit
   mov r7, #1
-  mov r0, r3
+  mov r0, #0
   swi 0
 
 .data
@@ -403,6 +488,9 @@ multiplier: .int 0
 
 current_state: .int STATE_START
 current_sum: .int 0
+
+output_number_buffer: .dcb.b buffer_size
+output_number_buffer_end = .
 
 
 # These are the different actions we can take at each step of our automaton.
