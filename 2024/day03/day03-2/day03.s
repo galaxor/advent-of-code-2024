@@ -145,39 +145,43 @@ examine_character_loop:
   # r0 needs to have the (current state << 8 | current character) so we can pass it to any of the ops subroutines if we do them.
 
   push {r0, r1, r2, r3, r4, r5, r6}
+
+  push {r0, r1, r4}
   mov r7, #OP_COPY_MULTIPLICAND_DIGIT
   ands r7, r7, r1
   it ne
   blne copy_multiplicand_digit
-  pop {r0, r1, r2, r3, r4, r5, r6}
+  pop {r0, r1, r4}
 
-  push {r0, r1, r2, r3, r4, r5, r6}
+  push {r0, r1, r4}
   mov r7, #OP_COPY_MULTIPLIER_DIGIT
   ands r7, r7, r1
   it ne
   blne copy_multiplier_digit
-  pop {r0, r1, r2, r3, r4, r5, r6}
+  pop {r0, r1, r4}
 
-  push {r0, r1, r2, r3, r4, r5, r6}
+  push {r0, r1, r4}
   mov r7, #OP_MULTIPLY
   ands r7, r7, r1
   it ne
   blne multiply
-  pop {r0, r1, r2, r3, r4, r5, r6}
+  pop {r0, r1, r4}
 
   mov r7, #OP_SWITCH_ON
   ands r7, r7, r1
   ittt ne
-  movne r2, #0
+  movne r2, #1
   ldrne r3, =switched_on
   strne r2, [r3]
 
   mov r7, #OP_SWITCH_OFF
   ands r7, r7, r1
   ittt ne
-  movne r2, #1
+  movne r2, #0
   ldrne r3, =switched_on
   strne r2, [r3]
+
+  pop {r0, r1, r2, r3, r4, r5, r6}
 
   mov r7, #OP_RESET
   ands r7, r7, r1
@@ -530,10 +534,10 @@ switched_on: .int 1
 OP_NOOP = 1 << 24
 OP_COPY_MULTIPLICAND_DIGIT = 2 << 24
 OP_COPY_MULTIPLIER_DIGIT = 4 << 24
-OP_MULTIPLY = (16+8) << 24
+OP_MULTIPLY = 8 << 24
 OP_RESET = 16 << 24
-OP_SWITCH_ON = (32 + 16) << 24
-OP_SWITCH_OFF = (64 + 16) << 24
+OP_SWITCH_ON = 32 << 24
+OP_SWITCH_OFF = 64 << 24
 
 
 automaton_table:
@@ -603,7 +607,7 @@ automaton_table:
   .int 'm' + STATE_MULTIPLIER << 8 + STATE_M << 16 + OP_RESET
   .int 'd' + STATE_MULTIPLIER << 8 + STATE_D << 16 + OP_RESET
 
-  .int ')' + STATE_MULTIPLIER << 8 + STATE_START << 16 + OP_MULTIPLY
+  .int ')' + STATE_MULTIPLIER << 8 + STATE_START << 16 + (OP_MULTIPLY | OP_RESET)
 
   .int 'o' + STATE_D << 8 + STATE_DO << 16 + OP_NOOP
   .int 'm' + STATE_D << 8 + STATE_M << 16 + OP_RESET
@@ -614,7 +618,7 @@ automaton_table:
   .int 'm' + STATE_DO << 8 + STATE_M << 16 + OP_RESET
   .int 'd' + STATE_DO << 8 + STATE_D << 16 + OP_RESET
 
-  .int ')' + STATE_DO_OPEN_PAREN << 8 + STATE_START << 16 + OP_SWITCH_ON
+  .int ')' + STATE_DO_OPEN_PAREN << 8 + STATE_START << 16 + (OP_SWITCH_ON | OP_RESET)
   .int 'm' + STATE_DO_OPEN_PAREN << 8 + STATE_M << 16 + OP_RESET
   .int 'd' + STATE_DO_OPEN_PAREN << 8 + STATE_D << 16 + OP_RESET
 
@@ -630,7 +634,7 @@ automaton_table:
   .int 'm' + STATE_DON_APOSTROPHE_T << 8 + STATE_M << 16 + OP_RESET
   .int 'd' + STATE_DON_APOSTROPHE_T << 8 + STATE_D << 16 + OP_RESET
 
-  .int ')' + STATE_DON_APOSTROPHE_T_OPEN_PAREN << 8 + STATE_START << 16 + OP_SWITCH_OFF
+  .int ')' + STATE_DON_APOSTROPHE_T_OPEN_PAREN << 8 + STATE_START << 16 + (OP_SWITCH_OFF | OP_RESET)
   .int 'm' + STATE_DON_APOSTROPHE_T_OPEN_PAREN << 8 + STATE_M << 16 + OP_RESET
   .int 'd' + STATE_DON_APOSTROPHE_T_OPEN_PAREN << 8 + STATE_D << 16 + OP_RESET
 
