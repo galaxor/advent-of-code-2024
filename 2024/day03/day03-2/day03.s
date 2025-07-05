@@ -141,27 +141,43 @@ examine_character_loop:
   # Figure out what opcode(s) we're doing and jump to the subroutine to do that.
   # The subroutine must not touch r1, which contains the list of opcodes that we're doing.
   mov r0, r5
-  push {r0, r1, r2, r3, r4, r5, r6}
 
   # r0 needs to have the (current state << 8 | current character) so we can pass it to any of the ops subroutines if we do them.
 
+  push {r0, r1, r2, r3, r4, r5, r6}
   mov r7, #OP_COPY_MULTIPLICAND_DIGIT
   ands r7, r7, r1
   it ne
   blne copy_multiplicand_digit
+  pop {r0, r1, r2, r3, r4, r5, r6}
 
+  push {r0, r1, r2, r3, r4, r5, r6}
   mov r7, #OP_COPY_MULTIPLIER_DIGIT
   ands r7, r7, r1
   it ne
   blne copy_multiplier_digit
+  pop {r0, r1, r2, r3, r4, r5, r6}
 
+  push {r0, r1, r2, r3, r4, r5, r6}
   mov r7, #OP_MULTIPLY
   ands r7, r7, r1
   it ne
   blne multiply
-
-  # Whether we're resetting here or not, we need to get everything back off the stack.
   pop {r0, r1, r2, r3, r4, r5, r6}
+
+  mov r7, #OP_SWITCH_ON
+  ands r7, r7, r1
+  ittt ne
+  movne r2, #0
+  ldrne r3, =switched_on
+  strne r2, [r3]
+
+  mov r7, #OP_SWITCH_OFF
+  ands r7, r7, r1
+  ittt ne
+  movne r2, #1
+  ldrne r3, =switched_on
+  strne r2, [r3]
 
   mov r7, #OP_RESET
   ands r7, r7, r1
@@ -225,7 +241,14 @@ copy_multiplier_digit:
 
 .thumb_func
 multiply:
-  # For now, I'm just going to print out the multiplication I would do.
+  # If we are switched off, just return.
+  ldr r1, =switched_on
+  ldr r1, [r1]
+  adds r1, r1, #0
+  it eq
+  bxeq lr
+
+  # Print out the multiplication I will do, and then do it, adding the result to current_sum.
 
   ldr r1, =multiplicand_buffer
 
@@ -470,6 +493,14 @@ STATE_COMMA = 6
 STATE_MULTIPLIER = 7
 STATE_CLOSE_PAREN = 8
 
+STATE_D = 9
+STATE_DO = 10
+STATE_DO_OPEN_PAREN = 11
+STATE_DON = 13
+STATE_DON_APOSTROPHE = 14
+STATE_DON_APOSTROPHE_T = 15
+STATE_DON_APOSTROPHE_T_OPEN_PAREN = 16
+
 buffer_size = 8192
 input_buffer: .dcb.b buffer_size
 input_buffer_pointer: .long input_buffer
@@ -492,6 +523,8 @@ current_sum: .int 0
 output_number_buffer: .dcb.b buffer_size
 output_number_buffer_end = .
 
+switched_on: .int 1
+
 
 # These are the different actions we can take at each step of our automaton.
 OP_NOOP = 1 << 24
@@ -499,18 +532,24 @@ OP_COPY_MULTIPLICAND_DIGIT = 2 << 24
 OP_COPY_MULTIPLIER_DIGIT = 4 << 24
 OP_MULTIPLY = (16+8) << 24
 OP_RESET = 16 << 24
+OP_SWITCH_ON = (32 + 16) << 24
+OP_SWITCH_OFF = (64 + 16) << 24
 
 
 automaton_table:
   # (input character, input state, output state, output action)
   # Any time an (input state, input character) has no output state or action, the output state is STATE_START and the output action is to reset.
   .int 'm' + STATE_START << 8 + STATE_M << 16 + OP_NOOP
+  .int 'd' + STATE_START << 8 + STATE_D << 16 + OP_NOOP
   .int 'u' + STATE_M << 8 + STATE_U << 16 + OP_NOOP
   .int 'm' + STATE_M << 8 + STATE_M << 16 + OP_RESET
+  .int 'd' + STATE_M << 8 + STATE_D << 26 + OP_RESET
   .int 'l' + STATE_U << 8 + STATE_L << 16 + OP_NOOP
   .int 'm' + STATE_U << 8 + STATE_M << 16 + OP_RESET
+  .int 'd' + STATE_U << 8 + STATE_D << 26 + OP_RESET
   .int '(' + STATE_L << 8 + STATE_OPEN_PAREN << 16 + OP_NOOP
   .int 'm' + STATE_L << 8 + STATE_M << 16 + OP_RESET
+  .int 'd' + STATE_L << 8 + STATE_D << 16 + OP_RESET
 
   .int '1' + STATE_OPEN_PAREN << 8 + STATE_MULTIPLICAND << 16 + OP_COPY_MULTIPLICAND_DIGIT
   .int '2' + STATE_OPEN_PAREN << 8 + STATE_MULTIPLICAND << 16 + OP_COPY_MULTIPLICAND_DIGIT
@@ -522,6 +561,7 @@ automaton_table:
   .int '8' + STATE_OPEN_PAREN << 8 + STATE_MULTIPLICAND << 16 + OP_COPY_MULTIPLICAND_DIGIT
   .int '9' + STATE_OPEN_PAREN << 8 + STATE_MULTIPLICAND << 16 + OP_COPY_MULTIPLICAND_DIGIT
   .int 'm' + STATE_OPEN_PAREN << 8 + STATE_M << 16 + OP_RESET
+  .int 'd' + STATE_OPEN_PAREN << 8 + STATE_D << 16 + OP_RESET
 
   .int '0' + STATE_MULTIPLICAND << 8 + STATE_MULTIPLICAND << 16 + OP_COPY_MULTIPLICAND_DIGIT
   .int '1' + STATE_MULTIPLICAND << 8 + STATE_MULTIPLICAND << 16 + OP_COPY_MULTIPLICAND_DIGIT
@@ -535,6 +575,7 @@ automaton_table:
   .int '9' + STATE_MULTIPLICAND << 8 + STATE_MULTIPLICAND << 16 + OP_COPY_MULTIPLICAND_DIGIT
 
   .int 'm' + STATE_MULTIPLICAND << 8 + STATE_M << 16 + OP_RESET
+  .int 'd' + STATE_MULTIPLICAND << 8 + STATE_D << 16 + OP_RESET
   .int ',' + STATE_MULTIPLICAND << 8 + STATE_COMMA << 16 + OP_NOOP
 
   .int '1' + STATE_COMMA << 8 + STATE_MULTIPLIER << 16 + OP_COPY_MULTIPLIER_DIGIT
@@ -547,6 +588,7 @@ automaton_table:
   .int '8' + STATE_COMMA << 8 + STATE_MULTIPLIER << 16 + OP_COPY_MULTIPLIER_DIGIT
   .int '9' + STATE_COMMA << 8 + STATE_MULTIPLIER << 16 + OP_COPY_MULTIPLIER_DIGIT
   .int 'm' + STATE_COMMA << 8 + STATE_M << 16 + OP_RESET
+  .int 'd' + STATE_COMMA << 8 + STATE_D << 16 + OP_RESET
 
   .int '0' + STATE_MULTIPLIER << 8 + STATE_MULTIPLIER << 16 + OP_COPY_MULTIPLIER_DIGIT
   .int '1' + STATE_MULTIPLIER << 8 + STATE_MULTIPLIER << 16 + OP_COPY_MULTIPLIER_DIGIT
@@ -559,8 +601,38 @@ automaton_table:
   .int '8' + STATE_MULTIPLIER << 8 + STATE_MULTIPLIER << 16 + OP_COPY_MULTIPLIER_DIGIT
   .int '9' + STATE_MULTIPLIER << 8 + STATE_MULTIPLIER << 16 + OP_COPY_MULTIPLIER_DIGIT
   .int 'm' + STATE_MULTIPLIER << 8 + STATE_M << 16 + OP_RESET
+  .int 'd' + STATE_MULTIPLIER << 8 + STATE_D << 16 + OP_RESET
 
   .int ')' + STATE_MULTIPLIER << 8 + STATE_START << 16 + OP_MULTIPLY
+
+  .int 'o' + STATE_D << 8 + STATE_DO << 16 + OP_NOOP
+  .int 'm' + STATE_D << 8 + STATE_M << 16 + OP_RESET
+  .int 'd' + STATE_D << 8 + STATE_D << 16 + OP_RESET
+
+  .int '(' + STATE_DO << 8 + STATE_DO_OPEN_PAREN << 16 + OP_NOOP
+  .int 'n' + STATE_DO << 8 + STATE_DON << 16 + OP_NOOP
+  .int 'm' + STATE_DO << 8 + STATE_M << 16 + OP_RESET
+  .int 'd' + STATE_DO << 8 + STATE_D << 16 + OP_RESET
+
+  .int ')' + STATE_DO_OPEN_PAREN << 8 + STATE_START << 16 + OP_SWITCH_ON
+  .int 'm' + STATE_DO_OPEN_PAREN << 8 + STATE_M << 16 + OP_RESET
+  .int 'd' + STATE_DO_OPEN_PAREN << 8 + STATE_D << 16 + OP_RESET
+
+  .int '\'' + STATE_DON << 8 + STATE_DON_APOSTROPHE << 16 + OP_NOOP
+  .int 'm' + STATE_DON << 8 + STATE_M << 16 + OP_RESET
+  .int 'd' + STATE_DON << 8 + STATE_D << 16 + OP_RESET
+
+  .int 't' + STATE_DON_APOSTROPHE << 8 + STATE_DON_APOSTROPHE_T << 16 + OP_NOOP
+  .int 'm' + STATE_DON_APOSTROPHE << 8 + STATE_M << 16 + OP_RESET
+  .int 'd' + STATE_DON_APOSTROPHE << 8 + STATE_D << 16 + OP_RESET
+
+  .int '(' + STATE_DON_APOSTROPHE_T << 8 + STATE_DON_APOSTROPHE_T_OPEN_PAREN << 16 + OP_NOOP
+  .int 'm' + STATE_DON_APOSTROPHE_T << 8 + STATE_M << 16 + OP_RESET
+  .int 'd' + STATE_DON_APOSTROPHE_T << 8 + STATE_D << 16 + OP_RESET
+
+  .int ')' + STATE_DON_APOSTROPHE_T_OPEN_PAREN << 8 + STATE_START << 16 + OP_SWITCH_OFF
+  .int 'm' + STATE_DON_APOSTROPHE_T_OPEN_PAREN << 8 + STATE_M << 16 + OP_RESET
+  .int 'd' + STATE_DON_APOSTROPHE_T_OPEN_PAREN << 8 + STATE_D << 16 + OP_RESET
 
 automaton_table_end_pointer = .
 

@@ -1,5 +1,5 @@
-OUTPUTS := hello day03
-OBJECTS := hello.o day03.o
+OUTPUTS := day03
+OBJECTS := day03.o
 
 all: $(OUTPUTS)
 
