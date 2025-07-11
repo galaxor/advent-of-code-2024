@@ -2,6 +2,7 @@ with Ada.Text_IO.Unbounded_IO; use Ada.Text_IO.Unbounded_IO;
 with Ada.Text_Io; use Ada.Text_Io;
 with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;
 
+with Ada.Containers.Ordered_Maps;
 
 procedure Hello is
   Line: Unbounded_String;
@@ -11,6 +12,11 @@ procedure Hello is
 
   Prior_Page: Natural;
   Subsequent_Page: Natural;
+
+  package Map_Natural_Boolean is new Ada.Containers.Ordered_Maps(Key_Type => Natural, Element_Type => Boolean);
+
+  Pages_Seen_Map: Map_Natural_Boolean.Map := Map_Natural_Boolean.Empty_Map;
+
 begin
   Line := Ada.Text_IO.Unbounded_IO.Get_Line(Standard_Input);
 
