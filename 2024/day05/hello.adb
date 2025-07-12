@@ -41,6 +41,8 @@ procedure Hello is
 
   Predecessor_Cursor: Set_of_Naturals.Cursor := Set_of_Naturals.No_Element;
 
+  Sum: Natural := 0;
+
 begin
 
   -- Get all the rules about predecessors and successors.
@@ -74,10 +76,6 @@ begin
     end;
 
     Line := Ada.Text_IO.Unbounded_IO.Get_Line(Standard_Input);
-  end loop;
-
-  for Page_Map_Cursor in Iterate(Page_Predecessors) loop
-    Put_Line("Page" & Natural'Image(Key(Page_Map_Cursor)) & " has" & Ada.Containers.Count_Type'Image(Length(Element(Page_Map_Cursor))) & " predecessors");
   end loop;
 
 
@@ -153,10 +151,14 @@ begin
     end loop;
     
     if Layout_is_Good then
-      Put_Line("Good");
-    else
-      Put_Line("Bad");
+      -- Find the middle page and add its number to the sum.
+      -- Vector_of_Naturals.Element(Pages, ((Length(Pages) / 2) + 1))
+      Page := Vector_of_Naturals.Element(Container => Pages, Index => (Natural(Pages.Length) / 2));
+      Put_Line("Adding" & Natural'Image(Page));
+      Sum := Sum + Page;
     end if;
   end loop;
+
+  Put_Line("Sum:" & Natural'Image(Sum));
 
 end Hello;
