@@ -13,8 +13,8 @@ procedure Hello is
 
   Token: Unbounded_String;
 
-  Prior_Page: Natural;
-  Subsequent_Page: Natural;
+  Predecessor_Page: Natural;
+  Successor_Page: Natural;
 
   package Set_of_Naturals is new Ada.Containers.Ordered_Sets(Element_Type => Natural);
   use Set_of_Naturals;
@@ -26,7 +26,7 @@ procedure Hello is
 
   Page_Predecessors: Map_Natural_to_Set_of_Naturals.Map := Map_Natural_to_Set_of_Naturals.Empty_Map;
 
-  Page_Cursor: Map_Natural_to_Set_of_Naturals.Cursor := Map_Natural_to_Set_of_Naturals.No_Element;
+  Page_Map_Cursor: Map_Natural_to_Set_of_Naturals.Cursor := Map_Natural_to_Set_of_Naturals.No_Element;
 
   Inserted_Successfully: Boolean;
 
@@ -35,6 +35,11 @@ procedure Hello is
   package Vector_of_Naturals is new Ada.Containers.Vectors(Index_Type => Natural, Element_Type => Natural);
   Page: Natural;
   Pages: Vector_of_Naturals.Vector := Vector_of_Naturals.Empty_Vector;
+  Pages_Cursor: Vector_of_Naturals.Cursor := Vector_of_Naturals.No_Element;
+
+  Layout_is_Good: Boolean := true;
+
+  Predecessor_Cursor: Set_of_Naturals.Cursor := Set_of_Naturals.No_Element;
 
 begin
 
@@ -46,33 +51,33 @@ begin
 
     Token := To_Unbounded_String(Slice(Line, 1, Delimiter_Index-1));
 
-    Prior_Page := Natural'Value(To_String(Token));
+    Predecessor_Page := Natural'Value(To_String(Token));
 
     Token := To_Unbounded_String(Slice(Line, Delimiter_Index+1, Length(Line)));
 
-    Subsequent_Page := Natural'Value(To_String(Token));
+    Successor_Page := Natural'Value(To_String(Token));
 
-    Page_Cursor := Page_Predecessors.Find(Subsequent_Page);
-    if not Has_Element(Page_Cursor) then
-      Page_Predecessors.Insert(Subsequent_Page, Set_of_Naturals.Empty_Set, Page_Cursor, Inserted_Successfully);
+    Page_Map_Cursor := Page_Predecessors.Find(Successor_Page);
+    if not Has_Element(Page_Map_Cursor) then
+      Page_Predecessors.Insert(Successor_Page, Set_of_Naturals.Empty_Set, Page_Map_Cursor, Inserted_Successfully);
     end if;
 
     -- In order to add to a set within a map, we have to write a closure!
     declare 
       procedure Insert_Page(The_Key: in Natural; The_Set: in out Set_of_Naturals.Set) is
       begin
-        The_Set.Insert(Prior_Page);
+        The_Set.Insert(Predecessor_Page);
       end Insert_Page;
     begin
       -- Now we use the closure using the cumbersome Update_Element API.
-      Page_Predecessors.Update_Element(Page_Cursor, Insert_Page'Access);
+      Page_Predecessors.Update_Element(Page_Map_Cursor, Insert_Page'Access);
     end;
 
     Line := Ada.Text_IO.Unbounded_IO.Get_Line(Standard_Input);
   end loop;
 
-  for Page_Cursor in Iterate(Page_Predecessors) loop
-    Put_Line("Page" & Natural'Image(Key(Page_Cursor)) & " has" & Ada.Containers.Count_Type'Image(Length(Element(Page_Cursor))) & " predecessors");
+  for Page_Map_Cursor in Iterate(Page_Predecessors) loop
+    Put_Line("Page" & Natural'Image(Key(Page_Map_Cursor)) & " has" & Ada.Containers.Count_Type'Image(Length(Element(Page_Map_Cursor))) & " predecessors");
   end loop;
 
 
@@ -91,8 +96,9 @@ begin
   -- This program should be divided up into different procedures.  This would be a great boundary for one.
   -- It's too scary to figure out how to do that, though.
 
-  loop
+  while not End_of_File loop
     Line := Ada.Text_IO.Unbounded_IO.Get_Line(Standard_Input);
+
     Start_Index := 1;
 
     Pages := Vector_of_Naturals.Empty_Vector;
@@ -109,16 +115,48 @@ begin
       Page := Natural'Value(To_String(Token));
 
       Pages.Append(Page);
-      Put_Line("Appended page" & Natural'Image(Page));
 
       Start_Index := Delimiter_Index+1;
 
       exit when Delimiter_Index = 0;
     end loop;
 
-    Put_Line("Pages:" & Ada.Containers.Count_Type'Image(Pages.Length));
+    -- We have read in an entire line of pages and placed them in the Pages vector.
+    -- We have the rules in the Page_Predecessors map.
+    -- We have the "successor seen" map to tell us, for each page, if we've seen a successor of that page.
+    -- We have what we need to figure out if this page layout is valid.
 
-    exit when Length(Line) = 0;
+    Layout_is_Good := true;
+    Successor_Seen := Empty_Set;
+
+    for Pages_Cursor in Pages.Iterate loop
+      Page := Vector_of_Naturals.Element(Pages_Cursor);
+
+      -- If we've already seen a successor to this page, the layout is bad.
+      if Set_of_Naturals.Has_Element(Successor_Seen.Find(Page)) then
+        Layout_is_Good := false;
+      end if;
+      exit when not Layout_is_Good;
+
+      -- We haven't seen a successor to this page yet, so let's mark all of
+      -- this page's predecessors and tell them that a successor has been seen.
+      Page_Map_Cursor := Page_Predecessors.Find(Page);
+      if Map_Natural_to_Set_of_Naturals.Has_Element(Page_Map_Cursor) then
+        Current_Set := Map_Natural_to_Set_of_Naturals.Element(Page_Predecessors.Find(Page));
+        for Predecessor_Cursor in Current_Set.Iterate loop
+          if not Has_Element(Successor_Seen.Find(Element(Predecessor_Cursor))) then 
+            Successor_Seen.Insert(Element(Predecessor_Cursor));
+          end if;
+        end loop;
+      end if;
+      
+    end loop;
+    
+    if Layout_is_Good then
+      Put_Line("Good");
+    else
+      Put_Line("Bad");
+    end if;
   end loop;
 
 end Hello;
