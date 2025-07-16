@@ -2,4 +2,4 @@ OUTPUTS = hello
 OBJECTS = hello.o
 
 $(OUTPUTS): %: %.adb
-	gnat make -o $@ $<
+	gnat make -g -o $@ $<
