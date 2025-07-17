@@ -155,6 +155,8 @@ begin
       -- If we've already seen a successor to this page, the layout is bad.
       if Has_Element(Successor_Seen.Find(Page)) then
         if Natural(Length(Element(Successor_Seen.Find(Page)))) > 0 then
+          Layout_is_Good := false;
+
           -- This is where we move pages around.
           -- We need to find the successor page that we've already seen, and we need to move it to the position in Pages after this page.
           -- This page is number Page, and it's located at Pages_Cursor.
@@ -194,7 +196,6 @@ begin
           end loop;
         end if;
       end if;
-      exit when not Layout_is_Good;
 
       -- We haven't seen a successor to this page yet, so let's mark all of
       -- this page's predecessors and tell them that a successor has been seen.
@@ -225,21 +226,25 @@ begin
       
     end loop;
 
-    if Layout_is_Good then
-      Put_Line("Good");
-    else
-      Put_Line("Bad");
+    if not Layout_is_Good then
+      declare
+        Middle_Page_Index: Natural;
+      begin
+        -- Find the middle page and add its number to the sum.
+        Middle_Page_Index := Natural(Pages.Length) / 2;
+        Pages_Cursor := Pages.First;
+        while Middle_Page_Index > 0 loop
+          Pages_Cursor := Next(Pages_Cursor);
+          Middle_Page_Index := Middle_Page_Index - 1;
+        end loop;
+        
+        Page := Element(Pages_Cursor);
+        Put_Line("Adding" & Natural'Image(Page));
+        Sum := Sum + Page;
+      end;
     end if;
-    
---     if Layout_is_Good then
---       -- Find the middle page and add its number to the sum.
---       -- Vector_of_Naturals.Element(Pages, ((Length(Pages) / 2) + 1))
---       Page := Vector_of_Naturals.Element(Container => Pages, Index => (Natural(Pages.Length) / 2));
---       Put_Line("Adding" & Natural'Image(Page));
---       Sum := Sum + Page;
---     end if;
   end loop;
 
---   Put_Line("Sum:" & Natural'Image(Sum));
+  Put_Line("Sum:" & Natural'Image(Sum));
 
 end Hello;
