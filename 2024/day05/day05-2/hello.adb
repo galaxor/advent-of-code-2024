@@ -140,13 +140,21 @@ begin
     Layout_is_Good := true;
     Successor_Seen := Map_Natural_to_Set_of_Naturals.Empty_Map;
 
-    for Pages_Cursor in Pages.Iterate loop
+    Put("The list was   :");
+    for Cool_Page in Pages.Iterate loop
+      Put(Natural'Image(Element(Cool_Page)));
+    end loop;
+    Put_Line("");
+
+    Pages_Cursor := Pages.First;
+    while Has_Element(Pages_Cursor) loop
       Page := Linked_List_of_Naturals.Element(Pages_Cursor);
+
+      Put_Line("Considering page" & Natural'Image(Page));
 
       -- If we've already seen a successor to this page, the layout is bad.
       if Has_Element(Successor_Seen.Find(Page)) then
         if Natural(Length(Element(Successor_Seen.Find(Page)))) > 0 then
-          Layout_is_Good := false;
           -- This is where we move pages around.
           -- We need to find the successor page that we've already seen, and we need to move it to the position in Pages after this page.
           -- This page is number Page, and it's located at Pages_Cursor.
@@ -155,6 +163,28 @@ begin
             Successor_Page_Cursor := Element(Page_Catalog.Find(Element(Successor_Page)));
 
             Splice(Source => Pages, Target => Pages, Position => Successor_Page_Cursor, Before => Next(Pages_Cursor));
+
+            -- Now we have to take the successor page out of the Successor_Seen list for every one of its predecessor pages.
+            declare
+              Current_Successor_Set: Set_of_Naturals.Set := Empty_Set;
+              Current_Predecessor_Page: Natural;
+
+              -- Declare a "delete the successor page" function so we can delete the successor page from a set inside a map.
+              procedure Delete_Page(The_Key: in Natural; The_Set: in out Set_of_Naturals.Set) is
+              begin
+                if Has_Element(The_Set.Find(Element(Successor_Page))) then
+                  The_Set.Delete(Element(Successor_Page));
+                end if;
+              end Delete_Page;
+
+            begin
+              for Current_Predecessor_Set_Cursor in Element(Page_Predecessors.Find(Element(Successor_Page))).Iterate loop
+                Current_Predecessor_Page := Element(Current_Predecessor_Set_Cursor);
+                if Has_Element(Successor_Seen.Find(Current_Predecessor_Page)) then
+                  Successor_Seen.Update_Element(Successor_Seen.Find(Current_Predecessor_Page), Delete_Page'Access);
+                end if;
+              end loop;
+            end;
 
             Put("The list is now:");
             for Cool_Page in Pages.Iterate loop
@@ -190,6 +220,8 @@ begin
           end;
         end loop;
       end if;
+
+      Pages_Cursor := Next(Pages_Cursor);
       
     end loop;
 
