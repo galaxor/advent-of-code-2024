@@ -210,8 +210,8 @@ step_loop:
 
   # Set x14 to the direction we'd be facing if we had to turn to the right.
   add x14, x8, 1
-  cmp x8, 3
   mov x15, 0
+  cmp x8, 3
   csel x14, x14, x15, le
 
   # If that step would not lead us to a '#', we should turn to the right and not take that step.
