@@ -262,11 +262,77 @@ step_loop:
   cmp x20, 0
   b.eq step_loop
 
+  mov x0, x25
+  bl int_to_decimal_string
+
+  # This puts the start of the output string in x0 and the length in x1
+
+  # The write call needs the start of the string in x1 and the length in x2
+  mov x8, 0x40
+  mov x2, x1
+  mov x1, x0
+  mov x0, 1
+  svc 0
+
+  mov x8, 0x40
+  mov x0, 1
+  ldr x1, =newline
+  mov x2, 1
+  svc 0
+  
 
   # Exit
   mov x8, 0x5d
   mov x0, 0
   svc 0
+
+
+int_to_decimal_string:
+  # To print out number:
+  # Initialize a buffer to hold the digits. We'll fill the buffer from back to front.
+  # We return a pointer to the beginning of the number buffer in r0.
+  # The buffer ends at output_number_buffer_end.
+
+  # start_of_loop
+  #   x0 = (the current number) / 10
+  #   x1 = divisor (ten)
+  #   x2 = (the current number) % 10
+  #   put x1 on the buffer
+  #   set the current number to x0
+  #   Is the current number 0?  If not, go back to loop.
+
+  mov x1, #10
+
+  # r4 is the pointer into the output buffer (starting at "output_number_buffer").
+  # We need the pointer to start at the back.
+  ldr x4, =output_number_buffer
+  mov x5, #BUFFER_SIZE
+  add x4, x4, x5
+
+int_to_decimal_string_loop:
+  # Set the pointer to where we're putting the digit.
+  sub x4, x4, #1
+
+  udiv x10, x0, x1
+  msub x2, x10, x1, x0
+  mov x0, x10
+
+  # The digit is in x2.  Ascii-fy it.
+  add x2, x2, #0x30
+  # Put the digit into the buffer
+  strb w2, [x4]
+  cmp x0, #0
+  b.ne int_to_decimal_string_loop
+
+  # The buffer is filled.  Return it.
+  # x0 will be the pointer to the start of the number string.
+  mov x0, x4
+
+  # r1 will be the length of the string.
+  ldr x1, =output_number_buffer_end
+  sub x1, x1, x0
+  
+  blr lr
 
 
 
@@ -292,6 +358,12 @@ playfield_height: .quad 0
 guard_x: .quad 0
 guard_y: .quad 0
 guard_direction: .quad 0
+
+BUFFER_SIZE = 8192
+output_number_buffer: .space BUFFER_SIZE
+output_number_buffer_end = .
+
+newline: .byte '\n' 
 
 
 # Directions are up, right, down, left
