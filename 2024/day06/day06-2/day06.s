@@ -170,7 +170,7 @@ start_playing:
   # x10 is &guard_velocity_y
   ldr x10, =guard_velocity_y
 
-  # x25 is the number of unique squares the guard has been on.
+  # x25 is the number of squares where we could add an obstacle to cause a cycle.
   mov x25, 0
 
   # Load the character that's at the guard's current position.  It will be '.'.
@@ -179,8 +179,6 @@ start_playing:
   # Load x13 with the current index into the playfield.
   # x13 = Y * playfield_width + X
   madd x13, x7, x4, x6
-
-  mov x23, 'X' 
 
 step_loop:
   # Call the cycle_maker subroutine.
@@ -193,34 +191,40 @@ step_loop:
   # register by itself.
   # I got this idea from https://community.arm.com/arm-community-blogs/b/architectures-and-processors-blog/posts/using-the-stack-in-aarch64-implementing-push-and-pop
 
-  # We're saving 8 8-byte registers.
-  sub sp, sp, 8 * 8
-  str x2, [sp, 8*0]
-  str x4, [sp, 8*1]
-  str x5, [sp, 8*2]
-  str x6, [sp, 8*3]
-  str x7, [sp, 8*4]
-  str x8, [sp, 8*5]
-  str x9, [sp, 8*6]
-  str x10, [sp, 8*7]
+  # We're saving 10 8-byte registers.
+  sub sp, sp, 8 * 10
+  str x0, [sp, 8*0]
+  str x2, [sp, 8*1]
+  str x4, [sp, 8*2]
+  str x5, [sp, 8*3]
+  str x6, [sp, 8*4]
+  str x7, [sp, 8*5]
+  str x8, [sp, 8*6]
+  str x9, [sp, 8*7]
+  str x10, [sp, 8*8]
+  str x13, [sp, 8*9]
 
   bl cycle_maker
 
+  # The return value is in x0:  It's 0 if it's not a cycle and 1 if it is.
+  add x25, x25, x0
+
   # Now get everything back off the stack
-  ldr x2, [sp, 8*0]
-  ldr x4, [sp, 8*1]
-  ldr x5, [sp, 8*2]
-  ldr x6, [sp, 8*3]
-  ldr x7, [sp, 8*4]
-  ldr x8, [sp, 8*5]
-  ldr x9, [sp, 8*6]
-  ldr x10, [sp, 8*7]
-  add sp, sp, 8 * 8
+  ldr x0, [sp, 8*0]
+  ldr x2, [sp, 8*1]
+  ldr x4, [sp, 8*2]
+  ldr x5, [sp, 8*3]
+  ldr x6, [sp, 8*4]
+  ldr x7, [sp, 8*5]
+  ldr x8, [sp, 8*6]
+  ldr x9, [sp, 8*7]
+  ldr x10, [sp, 8*8]
+  ldr x13, [sp, 8*9]
+  add sp, sp, 8 * 10
 
   # What is at our feet?  If it's a '.', add 1 to the number of unique squares we've been on, and change it to an X.
   cmp x0, '.' 
   cset x24, eq
-  add x25, x25, x24
 
   # Store the X at our feet.
   strb w23, [x2, x13]
@@ -369,7 +373,193 @@ int_to_decimal_string_loop:
   blr lr
 
 cycle_maker:
-  # Don't actually do anything.
+  # The callee-save registers are x19-x28.
+  # We're using 19 and 20.
+  # We're saving 2 8-byte registers.
+  sub sp, sp, 8 * 6
+  str x19, [sp, 8*0]
+  str x20, [sp, 8*1]
+  str x21, [sp, 8*2]
+  str x22, [sp, 8*3]
+  str x23, [sp, 8*4]
+
+  # Initialize x1 to the length of the turning point list.
+  mov x1, 0
+
+  ldr x21, =turning_points_x
+  ldr x22, =turning_points_y
+  ldr x23, =turning_points_direction
+
+  # Try putting an obstacle in front of us.  Then run that scenario and see if we find a cycle.
+
+  # Let's have the guard take a speculative step so we can see what's at their new spot.
+  # Load the guard's (x, y) velocities into (x11, x12)
+  ldr x11, [x9, x8, LSL#3]
+  ldr x12, [x10, x8, LSL#3]
+
+  # Add the guard's current position to their velocity to see what their new position is.
+  add x11, x11, x6
+  add x12, x12, x7
+
+
+  # x13 = Y * playfield_width + X
+  madd x13, x12, x4, x11
+
+  # Use x13 as an index into the playfield.
+  ldrb w0, [x2, x13]
+
+  # If there's an X or a # on the playfield in that position, quit and report that this position doesn't work.
+  # The # because then we can't add a new obstacle there, and the X because if
+  # we put a new obstacle there, we would've bumped into it already in our trek so
+  # far.
+  cmp x0, '.' 
+  # We want to return 0 if we couldn't place an obstacle.
+  cset x0, ne
+  b.eq cycle_maker_end
+
+  # x16 and x17 are the (x, y) location where we put the obstacle (so we can take it back if it doesn't work out).
+  mov x16, x11
+  mov x17, x12
+
+  # Actually place the obstacle in the playfield
+  mov x3, '#' 
+  strb w3, [x2, x13]
+  
+
+  # We've placed our obstacle or died trying.  Now let's let the guard walk around and see if it causes a cycle.
+  
+cycle_maker_step_loop:
+
+  # Set x14 to the direction we'd be facing if we had to turn to the right.
+  add x14, x8, 1
+  mov x15, 0
+  cmp x8, 3
+  csel x14, x14, x15, le
+
+  # If it's a #, check if it's in the list of turns we've made.  If it is, then
+  # this is a cycle!  If it's not a cycle, add it to the list for later checking.
+  cmp x0, '#'
+  b.ne cycle_maker_step_no_cycle
+
+  # Go through the list of turns and see if this one is on it.
+  # Remember, (x6, x7) = (X, Y), and x8 is direction.
+  # x18 is a list iterator.
+  mov x18, -1 
+
+turning_point_list_check_loop:
+  add x18, x18, 1
+
+  # x1 has the length of the turning point list.
+  cmp x18, x1
+  b.ge cycle_maker_obstacle_no_cycle
+
+  # x21 has =turning_points_x
+  # x22 has =turning_points_y
+  # x23 has =turning_points_direction
+  ldr x19, [x21, x18, lsl#3]
+  cmp x19, x6
+  b.ne turning_point_list_check_loop
+  ldr x19, [x22, x18, lsl#3]
+  cmp x19, x7
+  b.ne turning_point_list_check_loop
+  ldr x19, [x23, x18, lsl#3]
+  cmp x19, x8
+  b.ne turning_point_list_check_loop
+
+  # If we're here, that means we've found a cycle!
+  mov x0, 1
+  b cycle_maker_end
+
+cycle_maker_obstacle_no_cycle:
+  # We bumped into an obstacle, but it wasn't a cycle, so let's add that
+  # obstacle to the list of obstacles and then take the next cyclemaker step.
+
+  # The obstacle we want to add to the list is at (X, Y, Direction) = (x6, x7, x8)
+  # x1 has the length of the turning point list.
+  # x21 has =turning_points_x
+  # x22 has =turning_points_y
+  # x23 has =turning_points_direction
+  add x1, x1, 1
+  str x6, [x21, x1, lsl#3]
+  str x7, [x22, x1, lsl#3]
+  str x8, [x23, x1, lsl#3]
+  
+
+cycle_maker_step_no_cycle:
+  # If that step would not lead us to a '#', we should turn to the right and not take that step.
+  cmp x0, '#'
+  # If it's a #, turn to the right.
+  csel x8, x14, x8, eq
+  # If it's not a #, take the step.
+  csel x6, x11, x6, ne
+  csel x7, x12, x7, ne
+
+  # x16 and x17 are the (x, y) location where we put the obstacle (so we can take it back if it doesn't work out).
+  mov x16, x11
+  mov x17, x12
+  
+  
+  # We'll set x3 to be 0 if we left the playfield and 1 if we found a cycle.
+  mov x3, -1 
+
+  # If the new position is outside the playfield, report doneness.
+  # x11 is where the guard would end up (X)
+  # x12 is where the guard would end up (Y)
+
+  # x4 is playfield_width
+  # x5 is playfield_height
+
+  # x6 is guard_x
+  # x7 is guard_y
+
+  cmp x6, -1
+  cset x19, le
+  orr x3, x3, x19
+
+  cmp x6, x4
+  cset x19, ge
+  orr x20, x20, x19
+
+  cmp x7, -1
+  cset x19, le
+  orr x20, x20, x19
+
+  cmp x7, x5
+  cset x19, ge
+  orr x20, x20, x19
+
+  # Load x0 with what is at our feet
+  # x13 = Y * playfield_width + X
+  madd x13, x7, x4, x6
+
+  # Use x13 as an index into the playfield.
+  ldrb w0, [x2, x13]
+  
+  # x20 is 1 if we left the playfield and 0 if not.
+  cmp x20, 0
+  b.eq cycle_maker_step_loop
+
+cycle_maker_end:
+  # Undo the barrier we placed.
+
+  # x16 and x17 are the (x, y) location where we put the obstacle (so we can take it back if it doesn't work out).
+
+  # x13 = Y * playfield_width + X
+  madd x13, x17, x4, x16
+
+  # x2 is the &playfield
+  mov x16, '.'
+  strb w16, [x2, x13]
+
+  # The callee-save registers are x19-x28.
+  ldr x19, [sp, 8*0]
+  ldr x20, [sp, 8*1]
+  ldr x21, [sp, 8*2]
+  ldr x22, [sp, 8*3]
+  ldr x23, [sp, 8*4]
+  add sp, sp, 8 * 6
+
+  # Return.
   blr lr
 
 
@@ -413,5 +603,7 @@ newline: .byte '\n'
 guard_velocity_x: .quad 0, 1, 0, -1
 guard_velocity_y: .quad -1, 0, 1, 0
 
+# List of turning points we've encountered during a cycle check.
 turning_points_x: .ds.d PLAYFIELD_SIZE
 turning_points_y: .ds.d PLAYFIELD_SIZE
+turning_points_direction: .ds.d PLAYFIELD_SIZE
