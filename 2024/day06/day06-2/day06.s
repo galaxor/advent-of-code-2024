@@ -250,7 +250,7 @@ step_loop:
   add x14, x8, 1
   mov x15, 0
   cmp x8, 3
-  csel x14, x14, x15, le
+  csel x14, x14, x15, lt
 
   # If that step would not lead us to a '#', we should turn to the right and not take that step.
   cmp x0, '#'
@@ -414,7 +414,7 @@ cycle_maker:
   # far.
   cmp x0, '.' 
   # We want to return 0 if we couldn't place an obstacle.
-  cset x0, ne
+  mov x0, 0
   b.ne cycle_maker_end
 
   # x16 and x17 are the (x, y) location where we put the obstacle (so we can take it back if it doesn't work out).
@@ -475,6 +475,57 @@ turning_point_list_check_loop:
   b.ne turning_point_list_check_loop
 
   # If we're here, that means we've found a cycle!
+
+  # I want to print out the (x, y) location where we put the obstacle, for debugging.
+  # I'll call a print function.
+  # I'm just gonna save all the caller-save registers because I don't want to figure out if there's any we're not using.
+  sub sp, sp, 8 * 18
+  str x0, [sp, 8*0]
+  str x1, [sp, 8*1]
+  str x2, [sp, 8*2]
+  str x3, [sp, 8*3]
+  str x4, [sp, 8*4]
+  str x5, [sp, 8*5]
+  str x6, [sp, 8*6]
+  str x7, [sp, 8*7]
+  str x8, [sp, 8*8]
+  str x9, [sp, 8*9]
+  str x10, [sp, 8*10]
+  str x13, [sp, 8*11]
+  str x14, [sp, 8*12]
+  str x15, [sp, 8*13]
+  str x16, [sp, 8*14]
+  str x17, [sp, 8*15]
+  str x18, [sp, 8*16]
+  str lr, [sp, 8*17]
+
+  # x16 and x17 are the (x, y) location where we put the obstacle (so we can take it back if it doesn't work out).
+  mov x0, x16
+  mov x1, x17
+  
+  bl debug_print_obstacle_location
+
+  ldr x0, [sp, 8*0]
+  ldr x1, [sp, 8*1]
+  ldr x2, [sp, 8*2]
+  ldr x3, [sp, 8*3]
+  ldr x4, [sp, 8*4]
+  ldr x5, [sp, 8*5]
+  ldr x6, [sp, 8*6]
+  ldr x7, [sp, 8*7]
+  ldr x8, [sp, 8*8]
+  ldr x9, [sp, 8*9]
+  ldr x10, [sp, 8*10]
+  ldr x13, [sp, 8*11]
+  ldr x14, [sp, 8*12]
+  ldr x15, [sp, 8*13]
+  ldr x16, [sp, 8*14]
+  ldr x17, [sp, 8*15]
+  ldr x18, [sp, 8*16]
+  ldr lr, [sp, 8*17]
+  add sp, sp, 8 * 18
+
+
   mov x0, 1
   b cycle_maker_end
 
@@ -498,7 +549,7 @@ cycle_maker_step_no_cycle:
   add x14, x8, 1
   mov x15, 0
   cmp x8, 3
-  csel x14, x14, x15, le
+  csel x14, x14, x15, lt
 
   # Use x13 as an index into the playfield.
   ldrb w0, [x2, x13]
@@ -563,8 +614,8 @@ cycle_maker_step_no_cycle:
 
   b.eq cycle_maker_step_loop
 
-  mov x0, 1
-  sub x0, x0, x20
+  # We have left the playfield. Return that this obstacle does not make a cycle.
+  mov x0, 0
 
 cycle_maker_end:
   # Undo the barrier we placed.
@@ -585,6 +636,63 @@ cycle_maker_end:
   ldr x22, [sp, 8*3]
   ldr x23, [sp, 8*4]
   add sp, sp, 8 * 6
+
+  # Return.
+  blr lr
+
+debug_print_obstacle_location:
+  # (x0, x1) is the (x, y) location of the obstacle that caused a cycle. Print it out.
+
+  sub sp, sp, 8*4
+  str x0, [sp, 8*0]
+  str x1, [sp, 8*1]
+  str lr, [sp, 8*2]
+
+  # The write call needs the start of the string in x1 and the length in x2
+  mov x8, 0x40
+  mov x0, 1
+  ldr x1, =left_paren
+  mov x2, 1
+  svc 0
+
+  ldr x0, [sp, 8*0]
+  bl int_to_decimal_string
+
+  mov x8, 0x40
+  # int_to_decimal_string put the string in x0 and the length in x1.
+  mov x2, x1
+  mov x1, x0
+  mov x0, 1
+  svc 0
+
+  mov x8, 0x40
+  mov x0, 1
+  ldr x1, =comma_space
+  mov x2, 2
+  svc 0
+
+  ldr x0, [sp, 8*1]
+  bl int_to_decimal_string
+  
+  mov x8, 0x40
+  # int_to_decimal_string put the string in x0 and the length in x1.
+  mov x2, x1
+  mov x1, x0
+  mov x0, 1
+  svc 0
+
+  mov x8, 0x40
+  mov x0, 1
+  ldr x1, =right_paren_enter
+  mov x2, 2
+  svc 0
+
+  
+  ldr x0, [sp, 8*0]
+  ldr x1, [sp, 8*1]
+  ldr lr, [sp, 8*2]
+  add sp, sp, 8*4
+  
 
   # Return.
   blr lr
@@ -619,6 +727,9 @@ output_number_buffer: .space BUFFER_SIZE
 output_number_buffer_end = .
 
 newline: .byte '\n' 
+left_paren: .byte '('
+comma_space: .ascii ", "
+right_paren_enter: .ascii ")\n"
 
 
 # Directions are up, right, down, left
