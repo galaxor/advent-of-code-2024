@@ -180,6 +180,8 @@ start_playing:
   # x13 = Y * playfield_width + X
   madd x13, x7, x4, x6
 
+  mov x23, 'X'
+
 step_loop:
   # Call the cycle_maker subroutine.
   # We have to push all the caller-save registers.
@@ -626,8 +628,8 @@ cycle_maker_end:
   madd x13, x17, x4, x16
 
   # x2 is the &playfield
-  mov x16, '.'
-  strb w16, [x2, x13]
+  mov x19, '.'
+  strb w19, [x2, x13]
 
   # The callee-save registers are x19-x28.
   ldr x19, [sp, 8*0]
