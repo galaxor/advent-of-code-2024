@@ -415,26 +415,34 @@ cycle_maker:
   cmp x0, '.' 
   # We want to return 0 if we couldn't place an obstacle.
   cset x0, ne
-  b.eq cycle_maker_end
+  b.ne cycle_maker_end
 
   # x16 and x17 are the (x, y) location where we put the obstacle (so we can take it back if it doesn't work out).
   mov x16, x11
   mov x17, x12
 
   # Actually place the obstacle in the playfield
-  mov x3, '#' 
-  strb w3, [x2, x13]
+  mov x0, '#' 
+  strb w0, [x2, x13]
   
 
   # We've placed our obstacle or died trying.  Now let's let the guard walk around and see if it causes a cycle.
   
 cycle_maker_step_loop:
+  # Let's have the guard take a speculative step so we can see what's at their new spot.
+  # Load the guard's (x, y) velocities into (x11, x12)
+  ldr x11, [x9, x8, LSL#3]
+  ldr x12, [x10, x8, LSL#3]
 
-  # Set x14 to the direction we'd be facing if we had to turn to the right.
-  add x14, x8, 1
-  mov x15, 0
-  cmp x8, 3
-  csel x14, x14, x15, le
+  # Add the guard's current position to their velocity to see what their new position is.
+  add x11, x11, x6
+  add x12, x12, x7
+
+  # x13 = Y * playfield_width + X
+  madd x13, x12, x4, x11
+
+  # Use x13 as an index into the playfield.
+  ldrb w0, [x2, x13]
 
   # If it's a #, check if it's in the list of turns we've made.  If it is, then
   # this is a cycle!  If it's not a cycle, add it to the list for later checking.
@@ -479,14 +487,23 @@ cycle_maker_obstacle_no_cycle:
   # x21 has =turning_points_x
   # x22 has =turning_points_y
   # x23 has =turning_points_direction
-  add x1, x1, 1
   str x6, [x21, x1, lsl#3]
   str x7, [x22, x1, lsl#3]
   str x8, [x23, x1, lsl#3]
+  add x1, x1, 1
   
 
 cycle_maker_step_no_cycle:
-  # If that step would not lead us to a '#', we should turn to the right and not take that step.
+  # Set x14 to the direction we'd be facing if we had to turn to the right.
+  add x14, x8, 1
+  mov x15, 0
+  cmp x8, 3
+  csel x14, x14, x15, le
+
+  # Use x13 as an index into the playfield.
+  ldrb w0, [x2, x13]
+
+  # If that step would lead us to a '#', we should turn to the right and not take that step.
   cmp x0, '#'
   # If it's a #, turn to the right.
   csel x8, x14, x8, eq
@@ -494,14 +511,7 @@ cycle_maker_step_no_cycle:
   csel x6, x11, x6, ne
   csel x7, x12, x7, ne
 
-  # x16 and x17 are the (x, y) location where we put the obstacle (so we can take it back if it doesn't work out).
-  mov x16, x11
-  mov x17, x12
   
-  
-  # We'll set x3 to be 0 if we left the playfield and 1 if we found a cycle.
-  mov x3, -1 
-
   # If the new position is outside the playfield, report doneness.
   # x11 is where the guard would end up (X)
   # x12 is where the guard would end up (Y)
@@ -514,7 +524,7 @@ cycle_maker_step_no_cycle:
 
   cmp x6, -1
   cset x19, le
-  orr x3, x3, x19
+  orr x20, x20, x19
 
   cmp x6, x4
   cset x19, ge
@@ -528,16 +538,33 @@ cycle_maker_step_no_cycle:
   cset x19, ge
   orr x20, x20, x19
 
-  # Load x0 with what is at our feet
+
+  # Get ready for another iteration of the cycle maker step loop.
+
   # x13 = Y * playfield_width + X
   madd x13, x7, x4, x6
 
-  # Use x13 as an index into the playfield.
-  ldrb w0, [x2, x13]
-  
+
   # x20 is 1 if we left the playfield and 0 if not.
   cmp x20, 0
+
+  # If we took the step and it landed us out of bounds, then loading from that
+  # location could cause a segfault.
+  # So if we stepped out of bounds, we'll load from playfield[0] instead of
+  # playfield[x13]. We'll throw out the value anyway.
+  # This is just a way to remove a branch -- load unconditionally from ...
+  # somewhere.
+
+  mov x0, 0
+  csel x13, x13, x0, eq
+  
+  # Use x13 as an index into the playfield.
+  ldrb w0, [x2, x13]
+
   b.eq cycle_maker_step_loop
+
+  mov x0, 1
+  sub x0, x0, x20
 
 cycle_maker_end:
   # Undo the barrier we placed.
@@ -565,10 +592,6 @@ cycle_maker_end:
 
 
 .data
-
-helloworld:
-  .asciz "Hello, world\n"
-hello_len = . - helloworld
 
 PLAYFIELD_SIZE = 256 * 256
 playfield_buffer:
