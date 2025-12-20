@@ -4,11 +4,14 @@
 (def lines (line-seq (clojure.java.io/reader *in*)))
 
 (defn largest-digit-starting-at-I-excluding-last-N [line starting-index exclude-count]
-  (def line-without-last-N-digits (subs line starting-index (- (count line) exclude-count)))
-  (def largest-digit (first (reverse (sort line-without-last-N-digits))))
-  (def index-of-largest-digit (+ starting-index (clojure.string/index-of (subs line starting-index) largest-digit)))
+  (let [
+        line-without-last-N-digits (subs line starting-index (- (count line) exclude-count))
+        largest-digit (first (reverse (sort line-without-last-N-digits)))
+        index-of-largest-digit (+ starting-index (clojure.string/index-of (subs line starting-index) largest-digit))
+       ]
 
-  {:largest-digit largest-digit, :next-start-index (inc index-of-largest-digit)}
+    {:largest-digit largest-digit, :next-start-index (inc index-of-largest-digit)}
+  )
 )
 
 (doseq [line lines]
