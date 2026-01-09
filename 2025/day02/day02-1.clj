@@ -13,7 +13,7 @@
     (doseq [my-number (range range-start (inc range-end))]
       (def my-digits (str my-number))
       (def is-invalid? (re-find #"^0|^(\d+)\1+$" my-digits))
-      (when is-invalid? (println "Indictment!" my-number))
+      ; (when is-invalid? (println "Indictment!" my-number))
       (def sum-of-invalids (if is-invalid? (+ sum-of-invalids my-number) sum-of-invalids))
     )
   )
